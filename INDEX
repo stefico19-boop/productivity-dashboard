@@ -24,6 +24,27 @@
     <p class="text-slate-300 mt-1">מעלים 3 דוחות (סגירות/המתנות, פעולות, נוכחות/כוח אדם). המערכת מאחדת לפי <b>מספר עובד + תאריך</b>, מסכמת חתימות באותו יום (משרד/בית/נוסף), מחשבת KPI ויוצרת דשבורד.</p>
   </header>
 
+  <!-- שלב 1: העלאת 3 קבצים יחד -->
+  <section class="max-w-7xl mx-auto px-4 mb-6">
+    <div class="rounded-3xl bg-indigo-500/10 border border-indigo-500/30 p-5 md:p-6">
+      <h2 class="text-xl font-bold mb-2">שלב 1: העלאת שלושה קבצים (XLS / XLSX / CSV)</h2>
+      <p class="text-slate-300 mb-3">בחרי/גררי לכאן את שלושת הקבצים: (1) פעולות עובדים, (2) פתיחת פנייה/סגירות/העברות, (3) כח אדם/נוכחות. ניתן גם להשתמש בשלושת השדות למטה – שתי האפשרויות תואמות.</p>
+      <div class="grid md:grid-cols-5 gap-3 items-start">
+        <div class="md:col-span-4">
+          <input id="fileMulti" type="file" multiple accept=".xlsx,.xls,.csv" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
+        </div>
+        <div class="md:col-span-1 flex gap-2">
+          <button id="btnPrepareAssign" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600">שייך קבצים</button>
+        </div>
+      </div>
+      <div id="multiAssign" class="hidden mt-4 space-y-3"></div>
+      <div class="hidden mt-3" id="multiActions">
+        <button id="btnLoadAssigned" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600">טען קבצים משויכים</button>
+        <span class="text-sm text-slate-400 ml-2">לאחר טעינה תופיע מפה לעמודות לכל דוח</span>
+      </div>
+    </div>
+  </section>
+
   <main class="max-w-7xl mx-auto px-4 pb-24">
     <!-- קונפיגורציה כללית -->
     <section class="rounded-3xl bg-white/5 border border-white/10 p-5 md:p-6 mb-6">
@@ -296,6 +317,12 @@
     const mapClosures = document.getElementById('mapClosures');
     const mapActions = document.getElementById('mapActions');
     const mapPresence = document.getElementById('mapPresence');
+    // multi upload DOM
+    const fileMulti = document.getElementById('fileMulti');
+    const btnPrepareAssign = document.getElementById('btnPrepareAssign');
+    const multiAssign = document.getElementById('multiAssign');
+    const multiActions = document.getElementById('multiActions');
+    const btnLoadAssigned = document.getElementById('btnLoadAssigned');
     const btnProcess = document.getElementById('btnProcess');
     const btnResetFilters = document.getElementById('btnResetFilters');
     const w1 = document.getElementById('w1');
@@ -311,6 +338,35 @@
     const tbody = document.getElementById('mergedBody');
 
     // ===== Events: upload & mapping =====
+    // Multi upload flow (Step 1)
+    btnPrepareAssign?.addEventListener('click', ()=>{
+      const files = Array.from(fileMulti?.files||[]);
+      if (!files.length){ alert('נא לבחור 3 קבצים לפחות (XLS/XLSX/CSV).'); return; }
+      multiAssign.innerHTML = '';
+      multiAssign.classList.remove('hidden');
+      multiActions.classList.remove('hidden');
+      files.forEach((f,idx)=>{
+        const row = document.createElement('div');
+        row.className = 'bg-white/5 border border-white/10 rounded-2xl p-3 grid md:grid-cols-3 gap-3 items-center';
+        row.innerHTML = `
+          <div class="text-sm">
+            <div class="font-semibold text-slate-100">${f.name}</div>
+            <div class="text-slate-400">${Math.round(f.size/1024)} KB</div>
+          </div>
+          <div>
+            <label class="text-sm block mb-1">סוג הדוח</label>
+            <select class="assignType w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" data-index="${idx}">
+              <option value="">— בחרי —</option>
+              <option value="actions">דוח פעולות (מיילים/שיחות/משימות)</option>
+              <option value="closures">דוח פתיחת פנייה/סגירות/העברות</option>
+              <option value="presence">דוח כח אדם/נוכחות</option>
+            </select>
+          </div>
+          <div class="text-xs text-slate-400">
+            טיפ: אם תתבלבלי תמיד אפשר לשנות וללחוץ שוב על "טען קבצים משויכים".
+          </div>
+        `;
+        multiAss
     elClosures.addEventListener('change', async (e)=>{
       const file = e.target.files[0]; if (!file) return;
       const rows = await readFile(file);
