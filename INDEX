@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>איחוד דוחות תפוקה יומית לפי עובד + חתימות</title>
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    html { scroll-behavior: smooth; }
+    /* טבלה נגללת אופקית במובייל */
+    .table-scroll { overflow-x:auto; }
+  </style>
+  <!-- SheetJS (XLSX) -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- FileSaver for CSV export (fallback) -->
+  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+  <header class="max-w-7xl mx-auto px-4 py-6">
+    <h1 class="text-2xl md:text-3xl font-bold">איחוד דוחות תפוקה יומית לפי עובד</h1>
+    <p class="text-slate-300 mt-1">מעלים 3 דוחות (סגירות/המתנות, פעולות, נוכחות/כוח אדם). המערכת מאחדת לפי <b>מספר עובד + תאריך</b>, מסכמת חתימות באותו יום (משרד/בית/נוסף), מחשבת KPI ויוצרת דשבורד.</p>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 pb-24">
+    <!-- קונפיגורציה כללית -->
+    <section class="rounded-3xl bg-white/5 border border-white/10 p-5 md:p-6 mb-6">
+      <h2 class="text-xl font-semibold mb-2">הנחיות עמודות צפויות (ניתן למפות לאחר העלאה)</h2>
+      <div class="grid md:grid-cols-3 gap-4 text-sm text-slate-300">
+        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
+          <h3 class="font-bold text-slate-100 mb-1">דוח 1 — סגירות והעברה להמתנה</h3>
+          <ul class="list-disc pr-5 leading-6">
+            <li>מספר עובד</li>
+            <li>שם עובד</li>
+            <li>תאריך (YYYY-MM-DD או DD/MM/YYYY)</li>
+            <li>סגירות</li>
+            <li>העברות להמתנה</li>
+          </ul>
+        </div>
+        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
+          <h3 class="font-bold text-slate-100 mb-1">דוח 2 — פעולות (מיילים/שיחות/משימות)</h3>
+          <ul class="list-disc pr-5 leading-6">
+            <li>מספר עובד</li>
+            <li>שם עובד</li>
+            <li>תאריך</li>
+            <li>מיילים</li>
+            <li>שיחות</li>
+            <li>משימות</li>
+          </ul>
+        </div>
+        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
+          <h3 class="font-bold text-slate-100 mb-1">דוח 3 — נוכחות/כח אדם (חתימות מרובות ביום)</h3>
+          <ul class="list-disc pr-5 leading-6">
+            <li>מספר עובד</li>
+            <li>שם עובד</li>
+            <li>תאריך</li>
+            <li>סוג חתימה ("משרד" / "בית" / "נוסף"…)</li>
+            <li>שעות משרד</li>
+            <li>שעות בית</li>
+            <li>שעות נוספות</li>
+            <li>שעות חסרות</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- העלאת קבצים -->
+    <section class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <h3 class="font-semibold mb-2">1) סגירות/העברות</h3>
+        <input id="fileClosures" type="file" accept=".xlsx,.xls,.csv" class="w-full text-slate-200" />
+        <div id="mapClosures" class="hidden mt-3"></div>
+      </div>
+      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <h3 class="font-semibold mb-2">2) פעולות</h3>
+        <input id="fileActions" type="file" accept=".xlsx,.xls,.csv" class="w-full text-slate-200" />
+        <div id="mapActions" class="hidden mt-3"></div>
+      </div>
+      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <h3 class="font-semibold mb-2">3) נוכחות/כח אדם</h3>
+        <input id="filePresence" type="file" accept=".xlsx,.xls,.csv" class="w-full text-slate-200" />
+        <div id="mapPresence" class="hidden mt-3"></div>
+      </div>
+    </section>
+
+    <!-- משקולות KPI + פילטרים -->
+    <section class="rounded-3xl bg-white/5 border border-white/10 p-5 md:p-6 mb-6">
+      <div class="grid md:grid-cols-2 gap-6">
+        <div>
+          <h3 class="font-semibold mb-2">משקולות KPI</h3>
+          <div class="space-y-3 text-sm">
+            <div>
+              <label class="block">סגירות + העברות (<span id="w1v">0.5</span>)</label>
+              <input id="w1" type="range" min="0" max="1" step="0.05" value="0.5" class="w-full">
+            </div>
+            <div>
+              <label class="block">פעולות (מיילים+שיחות+משימות) (<span id="w2v">0.3</span>)</label>
+              <input id="w2" type="range" min="0" max="1" step="0.05" value="0.3" class="w-full">
+            </div>
+            <div>
+              <label class="block">שעות עבודה בפועל/8 (<span id="w3v">0.2</span>)</label>
+              <input id="w3" type="range" min="0" max="1" step="0.05" value="0.2" class="w-full">
+            </div>
+            <p class="text-slate-400">טיפ: עדיף שסכום המשקולות יהיה 1. המערכת לא מכריחה, אך מציגה אזהרה אם חורגים.</p>
+            <p id="weightsWarn" class="hidden text-amber-400 text-sm">אזהרה: סכום המשקולות שונה מ־1</p>
+          </div>
+        </div>
+        <div>
+          <h3 class="font-semibold mb-2">פילטרים</h3>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <label class="block">מתאריך</label>
+              <input id="fromDate" type="date" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
+            </div>
+            <div>
+              <label class="block">עד תאריך</label>
+              <input id="toDate" type="date" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
+            </div>
+            <div class="col-span-2">
+              <label class="block">חיפוש עובד (שם/מספר)</label>
+              <input id="searchEmp" type="text" placeholder="לדוג׳: 1021 או דנה" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
+            </div>
+          </div>
+          <div class="flex flex-wrap gap-2 mt-3">
+            <button id="btnProcess" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600">עבד/י נתונים</button>
+            <button id="btnResetFilters" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">נקה פילטרים</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- דשבורד -->
+    <section class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <h3 class="font-semibold mb-2">Top KPI (יומי)</h3>
+        <canvas id="chartTopKPI" height="220"></canvas>
+      </div>
+      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <h3 class="font-semibold mb-2">סגירות מול שעות (יומי)</h3>
+        <canvas id="chartClosuresHours" height="220"></canvas>
+      </div>
+      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
+        <h3 class="font-semibold mb-2">חלוקת פעולות</h3>
+        <canvas id="chartActionsPie" height="220"></canvas>
+      </div>
+    </section>
+
+    <!-- טבלה מאוחדת -->
+    <section class="rounded-3xl bg-white/5 border border-white/10 p-5">
+      <div class="flex flex-wrap gap-2 mb-3">
+        <button id="btnExportXLSX" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600">ייצוא לאקסל</button>
+        <button id="btnExportCSV" class="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600">ייצוא CSV</button>
+      </div>
+      <div class="table-scroll">
+        <table class="min-w-full text-sm" id="mergedTable">
+          <thead class="bg-white/10">
+            <tr>
+              <th class="px-3 py-2 text-right">תאריך</th>
+              <th class="px-3 py-2 text-right">מס׳ עובד</th>
+              <th class="px-3 py-2 text-right">שם עובד</th>
+              <th class="px-3 py-2 text-right">סגירות</th>
+              <th class="px-3 py-2 text-right">העברות</th>
+              <th class="px-3 py-2 text-right">מיילים</th>
+              <th class="px-3 py-2 text-right">שיחות</th>
+              <th class="px-3 py-2 text-right">משימות</th>
+              <th class="px-3 py-2 text-right">שעות משרד</th>
+              <th class="px-3 py-2 text-right">שעות בית</th>
+              <th class="px-3 py-2 text-right">שעות נוספות</th>
+              <th class="px-3 py-2 text-right">שעות חסרות</th>
+              <th class="px-3 py-2 text-right">סה"כ שעות בפועל</th>
+              <th class="px-3 py-2 text-right">מס׳ חתימות ביום</th>
+              <th class="px-3 py-2 text-right">KPI</th>
+            </tr>
+          </thead>
+          <tbody id="mergedBody" class="divide-y divide-white/10"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // ===== Utilities =====
+    const lstore = {
+      get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
+      set(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+    };
+
+    const parseDate = (val) => {
+      if (!val) return null;
+      if (val instanceof Date) return val.toISOString().slice(0,10);
+      // try Excel serial
+      if (typeof val === 'number') {
+        const d = XLSX.SSF.parse_date_code(val);
+        if (d) {
+          const js = new Date(Date.UTC(d.y, d.m-1, d.d));
+          return js.toISOString().slice(0,10);
+        }
+      }
+      // normalize strings
+      const s = String(val).trim();
+      // 2025-10-28
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      // 28/10/2025 or 28.10.2025
+      const m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})$/);
+      if (m) {
+        const d = m[1].padStart(2,'0');
+        const mo = m[2].padStart(2,'0');
+        const y = m[3].length===2 ? ('20'+m[3]) : m[3];
+        return `${y}-${mo}-${d}`;
+      }
+      // fallback: Date()
+      const dt = new Date(s);
+      return isNaN(+dt) ? null : dt.toISOString().slice(0,10);
+    };
+
+    const toNumber = (v) => {
+      if (v === null || v === undefined || v === '') return 0;
+      const n = Number(String(v).replace(/[,\s]/g,''));
+      return isNaN(n) ? 0 : n;
+    };
+
+    // ===== File Parsing =====
+    async function readFile(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          try {
+            const data = new Uint8Array(e.target.result);
+            const wb = XLSX.read(data, {type:'array'});
+            const ws = wb.Sheets[wb.SheetNames[0]];
+            const json = XLSX.utils.sheet_to_json(ws, {defval: ''});
+            resolve(json);
+          } catch (err) { reject(err); }
+        };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+      });
+    }
+
+    function buildMappingUI(container, headers, defaults, storageKey){
+      container.innerHTML = '';
+      container.classList.remove('hidden');
+      const fields = Object.keys(defaults);
+      const saved = lstore.get(storageKey, {});
+      fields.forEach((f)=>{ if (saved[f]) defaults[f]=saved[f]; });
+
+      const wrap = document.createElement('div');
+      wrap.className = 'grid grid-cols-2 gap-3';
+      fields.forEach(field => {
+        const div = document.createElement('div');
+        div.innerHTML = `
+          <label class="text-sm text-slate-300">${field}</label>
+          <select data-field="${field}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 mt-1"></select>
+        `;
+        wrap.appendChild(div);
+      });
+      container.appendChild(wrap);
+
+      // fill options
+      const selects = container.querySelectorAll('select');
+      selects.forEach(sel => {
+        const f = sel.dataset.field;
+        const optEmpty = document.createElement('option'); optEmpty.value=''; optEmpty.textContent='— בחרי עמודה —'; sel.appendChild(optEmpty);
+        headers.forEach(h => {
+          const o = document.createElement('option'); o.value=h; o.textContent=h; sel.appendChild(o);
+        });
+        if (defaults[f] && headers.includes(defaults[f])) sel.value = defaults[f];
+        sel.addEventListener('change', ()=>{
+          saved[f]=sel.value; lstore.set(storageKey, saved);
+        })
+      });
+    }
+
+    function remapRow(row, map){
+      const out = {};
+      for (const [target, src] of Object.entries(map)){
+        out[target] = src ? row[src] : '';
+      }
+      return out;
+    }
+
+    // ===== State =====
+    const state = {
+      closures: [], actions: [], presence: [],
+      maps: { closures:{}, actions:{}, presence:{} },
+      merged: [],
+      charts: {kpi:null, ch:null, pie:null}
+    };
+
+    // ===== DOM =====
+    const elClosures = document.getElementById('fileClosures');
+    const elActions = document.getElementById('fileActions');
+    const elPresence = document.getElementById('filePresence');
+    const mapClosures = document.getElementById('mapClosures');
+    const mapActions = document.getElementById('mapActions');
+    const mapPresence = document.getElementById('mapPresence');
+    const btnProcess = document.getElementById('btnProcess');
+    const btnResetFilters = document.getElementById('btnResetFilters');
+    const w1 = document.getElementById('w1');
+    const w2 = document.getElementById('w2');
+    const w3 = document.getElementById('w3');
+    const w1v = document.getElementById('w1v');
+    const w2v = document.getElementById('w2v');
+    const w3v = document.getElementById('w3v');
+    const weightsWarn = document.getElementById('weightsWarn');
+    const fromDate = document.getElementById('fromDate');
+    const toDate = document.getElementById('toDate');
+    const searchEmp = document.getElementById('searchEmp');
+    const tbody = document.getElementById('mergedBody');
+
+    // ===== Events: upload & mapping =====
+    elClosures.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if (!file) return;
+      const rows = await readFile(file);
+      state.rawClosures = rows; // for headers
+      const headers = Object.keys(rows[0]||{});
+      buildMappingUI(mapClosures, headers, {
+        'מספר עובד':'מספר עובד',
+        'שם עובד':'שם עובד',
+        'תאריך':'תאריך',
+        'סגירות':'סגירות',
+        'העברות להמתנה':'העברות להמתנה'
+      }, 'map_closures');
+    });
+
+    elActions.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if (!file) return;
+      const rows = await readFile(file);
+      state.rawActions = rows;
+      const headers = Object.keys(rows[0]||{});
+      buildMappingUI(mapActions, headers, {
+        'מספר עובד':'מספר עובד',
+        'שם עובד':'שם עובד',
+        'תאריך':'תאריך',
+        'מיילים':'מיילים',
+        'שיחות':'שיחות',
+        'משימות':'משימות'
+      }, 'map_actions');
+    });
+
+    elPresence.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if (!file) return;
+      const rows = await readFile(file);
+      state.rawPresence = rows;
+      const headers = Object.keys(rows[0]||{});
+      buildMappingUI(mapPresence, headers, {
+        'מספר עובד':'מספר עובד',
+        'שם עובד':'שם עובד',
+        'תאריך':'תאריך',
+        'סוג חתימה':'סוג חתימה',
+        'שעות משרד':'שעות משרד',
+        'שעות בית':'שעות בית',
+        'שעות נוספות':'שעות נוספות',
+        'שעות חסרות':'שעות חסרות'
+      }, 'map_presence');
+    });
+
+    // Weights UI
+    [w1,w2,w3].forEach(inp=>{
+      const sync = ()=>{
+        w1v.textContent = (+w1.value).toFixed(2);
+        w2v.textContent = (+w2.value).toFixed(2);
+        w3v.textContent = (+w3.value).toFixed(2);
+        const s = (+w1.value)+(+w2.value)+(+w3.value);
+        weightsWarn.classList.toggle('hidden', Math.abs(s-1)<1e-6);
+      };
+      inp.addEventListener('input', sync); sync();
+    });
+
+    btnResetFilters.addEventListener('click', ()=>{
+      fromDate.value = '';
+      toDate.value = '';
+      searchEmp.value = '';
+      renderTable(state.merged);
+      renderCharts(state.merged);
+    });
+
+    btnProcess.addEventListener('click', ()=>{
+      processAll();
+    });
+
+    function getMap(key){ return lstore.get(key, {}); }
+
+    function processAll(){
+      if (!state.rawClosures || !state.rawActions || !state.rawPresence){
+        alert('נא להעלות את שלושת הקבצים.');
+        return;
+      }
+      const mc = getMap('map_closures');
+      const ma = getMap('map_actions');
+      const mp = getMap('map_presence');
+
+      // Remap & normalize
+      const closures = (state.rawClosures||[]).map(r=>{
+        const o = remapRow(r, mc);
+        return {
+          empId: String(o['מספר עובד']||'').trim(),
+          empName: String(o['שם עובד']||'').trim(),
+          date: parseDate(o['תאריך']),
+          closures: toNumber(o['סגירות']),
+          transfers: toNumber(o['העברות להמתנה'])
+        }
+      }).filter(x=>x.empId && x.date);
+
+      const actions = (state.rawActions||[]).map(r=>{
+        const o = remapRow(r, ma);
+        return {
+          empId: String(o['מספר עובד']||'').trim(),
+          empName: String(o['שם עובד']||'').trim(),
+          date: parseDate(o['תאריך']),
+          emails: toNumber(o['מיילים']),
+          calls: toNumber(o['שיחות']),
+          tasks: toNumber(o['משימות'])
+        }
+      }).filter(x=>x.empId && x.date);
+
+      const presenceRaw = (state.rawPresence||[]).map(r=>{
+        const o = remapRow(r, mp);
+        return {
+          empId: String(o['מספר עובד']||'').trim(),
+          empName: String(o['שם עובד']||'').trim(),
+          date: parseDate(o['תאריך']),
+          signType: String(o['סוג חתימה']||'').trim(),
+          office: toNumber(o['שעות משרד']),
+          home: toNumber(o['שעות בית']),
+          overtime: toNumber(o['שעות נוספות']),
+          missing: toNumber(o['שעות חסרות'])
+        }
+      }).filter(x=>x.empId && x.date);
+
+      // Group presence by empId+date (sum hours, count signings)
+      const presenceMap = new Map();
+      for (const p of presenceRaw){
+        const key = p.empId+'|'+p.date;
+        const prev = presenceMap.get(key) || {empId:p.empId, empName:p.empName, date:p.date, office:0, home:0, overtime:0, missing:0, signatures:0};
+        prev.office += p.office;
+        prev.home += p.home;
+        prev.overtime += p.overtime;
+        prev.missing += p.missing;
+        prev.signatures += 1;
+        // prefer non-empty name
+        if (!prev.empName && p.empName) prev.empName = p.empName;
+        presenceMap.set(key, prev);
+      }
+
+      // Aggregate closures/actions by empId+date as well (in case of duplicates)
+      const aggMap = (rows, fields) => {
+        const m = new Map();
+        for (const r of rows){
+          const key = r.empId+'|'+r.date;
+          const prev = m.get(key) || {empId:r.empId, empName:r.empName, date:r.date};
+          for (const f of fields){ prev[f] = (prev[f]||0) + (r[f]||0); }
+          if (!prev.empName && r.empName) prev.empName = r.empName;
+          m.set(key, prev);
+        }
+        return m;
+      }
+      const clMap = aggMap(closures, ['closures','transfers']);
+      const acMap = aggMap(actions, ['emails','calls','tasks']);
+
+      // Union keys
+      const keys = new Set([...clMap.keys(), ...acMap.keys(), ...presenceMap.keys()]);
+      const res = [];
+      const W1 = +w1.value, W2 = +w2.value, W3 = +w3.value;
+
+      keys.forEach(key => {
+        const [empId, date] = key.split('|');
+        const c = clMap.get(key) || {empId, empName:'', date, closures:0, transfers:0};
+        const a = acMap.get(key) || {empId, empName:'', date, emails:0, calls:0, tasks:0};
+        const p = presenceMap.get(key) || {empId, empName:'', date, office:0, home:0, overtime:0, missing:0, signatures:0};
+        const empName = c.empName || a.empName || p.empName || '';
+        const totalHours = (p.office + p.home + p.overtime) - p.missing;
+        const kpi = ( ( (c.closures + c.transfers) * W1 ) + ( (a.emails + a.calls + a.tasks) * W2 ) + ( (totalHours/8) * W3 ) );
+        res.push({
+          date,
+          empId,
+          empName,
+          closures: c.closures||0,
+          transfers: c.transfers||0,
+          emails: a.emails||0,
+          calls: a.calls||0,
+          tasks: a.tasks||0,
+          office: p.office||0,
+          home: p.home||0,
+          overtime: p.overtime||0,
+          missing: p.missing||0,
+          totalHours: +totalHours.toFixed(2),
+          signatures: p.signatures||0,
+          kpi: +kpi.toFixed(2)
+        });
+      });
+
+      // Save + filter + render
+      state.merged = res.sort((a,b)=> (a.date<b.date? -1: a.date>b.date? 1: a.empId.localeCompare(b.empId)));
+      applyFilters();
+    }
+
+    function applyFilters(){
+      let data = [...state.merged];
+      const fd = fromDate.value || null;
+      const td = toDate.value || null;
+      if (fd) data = data.filter(r=> r.date >= fd);
+      if (td) data = data.filter(r=> r.date <= td);
+      const q = searchEmp.value.trim();
+      if (q) {
+        const ql = q.toLowerCase();
+        data = data.filter(r=> r.empId.includes(q) || (r.empName||'').toLowerCase().includes(ql));
+      }
+      renderTable(data);
+      renderCharts(data);
+    }
+
+    [fromDate, toDate, searchEmp].forEach(el => el.addEventListener('input', applyFilters));
+
+    function renderTable(rows){
+      tbody.innerHTML = '';
+      const frag = document.createDocumentFragment();
+      rows.forEach(r => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td class="px-3 py-2">${r.date}</td>
+          <td class="px-3 py-2">${r.empId}</td>
+          <td class="px-3 py-2">${r.empName||''}</td>
+          <td class="px-3 py-2">${r.closures}</td>
+          <td class="px-3 py-2">${r.transfers}</td>
+          <td class="px-3 py-2">${r.emails}</td>
+          <td class="px-3 py-2">${r.calls}</td>
+          <td class="px-3 py-2">${r.tasks}</td>
+          <td class="px-3 py-2">${r.office}</td>
+          <td class="px-3 py-2">${r.home}</td>
+          <td class="px-3 py-2">${r.overtime}</td>
+          <td class="px-3 py-2">${r.missing}</td>
+          <td class="px-3 py-2">${r.totalHours}</td>
+          <td class="px-3 py-2">${r.signatures}</td>
+          <td class="px-3 py-2 font-semibold">${r.kpi}</td>
+        `;
+        frag.appendChild(tr);
+      });
+      tbody.appendChild(frag);
+    }
+
+    function sum(arr, f){ return arr.reduce((s,x)=> s + (x[f]||0), 0); }
+
+    function destroyChart(c){ if (c) { c.destroy(); } }
+
+    function renderCharts(rows){
+      // KPI Top — נבחר 10 רשומות KPI גבוהות בטווח הנוכחי
+      const top = [...rows].sort((a,b)=> b.kpi - a.kpi).slice(0,10);
+      const labelsTop = top.map(r=> `${r.empName||r.empId} • ${r.date}`);
+      const dataTop = top.map(r=> r.kpi);
+
+      destroyChart(state.charts.kpi);
+      state.charts.kpi = new Chart(document.getElementById('chartTopKPI'), {
+        type:'bar',
+        data:{ labels:labelsTop, datasets:[{ label:'KPI', data:dataTop }]},
+        options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ x:{ticks:{autoSkip:false}} } }
+      });
+
+      // Closures vs Hours
+      const byDay = {};
+      for (const r of rows){
+        if (!byDay[r.date]) byDay[r.date] = {closures:0, hours:0};
+        byDay[r.date].closures += (r.closures + r.transfers);
+        byDay[r.date].hours += r.totalHours;
+      }
+      const dates = Object.keys(byDay).sort();
+      const closuresArr = dates.map(d=> byDay[d].closures);
+      const hoursArr = dates.map(d=> byDay[d].hours);
+
+      destroyChart(state.charts.ch);
+      state.charts.ch = new Chart(document.getElementById('chartClosuresHours'), {
+        type:'line',
+        data:{ labels:dates, datasets:[
+          { label:'סגירות+העברות', data:closuresArr },
+          { label:'סה"כ שעות', data:hoursArr }
+        ]},
+        options:{ responsive:true }
+      });
+
+      // Actions pie (total on filtered set)
+      const emails = sum(rows,'emails');
+      const calls = sum(rows,'calls');
+      const tasks = sum(rows,'tasks');
+
+      destroyChart(state.charts.pie);
+      state.charts.pie = new Chart(document.getElementById('chartActionsPie'), {
+        type:'pie',
+        data:{ labels:['מיילים','שיחות','משימות'], datasets:[{ data:[emails, calls, tasks] }]},
+        options:{ responsive:true }
+      });
+    }
+
+    // ===== Export =====
+    function exportToXLSX(rows){
+      const ws = XLSX.utils.json_to_sheet(rows.map(r=>({
+        'תאריך': r.date,
+        'מס׳ עובד': r.empId,
+        'שם עובד': r.empName,
+        'סגירות': r.closures,
+        'העברות': r.transfers,
+        'מיילים': r.emails,
+        'שיחות': r.calls,
+        'משימות': r.tasks,
+        'שעות משרד': r.office,
+        'שעות בית': r.home,
+        'שעות נוספות': r.overtime,
+        'שעות חסרות': r.missing,
+        'סה"כ שעות בפועל': r.totalHours,
+        'מס׳ חתימות ביום': r.signatures,
+        'KPI': r.kpi
+      })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Merged');
+      XLSX.writeFile(wb, 'merged_kpi.xlsx');
+    }
+
+    function exportToCSV(rows){
+      const headers = ['date','empId','empName','closures','transfers','emails','calls','tasks','office','home','overtime','missing','totalHours','signatures','kpi'];
+      const csv = [headers.join(',')].concat(rows.map(r=> headers.map(h=> JSON.stringify(r[h]??'')).join(','))).join('\n');
+      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
+      saveAs(blob, 'merged_kpi.csv');
+    }
+
+    document.getElementById('btnExportXLSX').addEventListener('click', ()=> exportToXLSX(currentFiltered()));
+    document.getElementById('btnExportCSV').addEventListener('click', ()=> exportToCSV(currentFiltered()));
+
+    function currentFiltered(){
+      // recreate filter on demand (simple way to ensure sync)
+      let data = [...state.merged];
+      const fd = fromDate.value || null;
+      const td = toDate.value || null;
+      if (fd) data = data.filter(r=> r.date >= fd);
+      if (td) data = data.filter(r=> r.date <= td);
+      const q = searchEmp.value.trim();
+      if (q) {
+        const ql = q.toLowerCase();
+        data = data.filter(r=> r.empId.includes(q) || (r.empName||'').toLowerCase().includes(ql));
+      }
+      return data;
+    }
+  </script>
+</body>
+</html>
