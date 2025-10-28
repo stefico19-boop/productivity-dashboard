@@ -366,7 +366,45 @@
             טיפ: אם תתבלבלי תמיד אפשר לשנות וללחוץ שוב על "טען קבצים משויכים".
           </div>
         `;
-        multiAss
+        multiAssign.appendChild(row);
+      });
+    });
+
+    btnLoadAssigned?.addEventListener('click', async ()=>{
+      const files = Array.from(fileMulti?.files||[]);
+      if (!files.length){ alert('לא נבחרו קבצים.'); return; }
+      const selects = multiAssign.querySelectorAll('select.assignType');
+      // מניעת שיוך כפול לאותו סוג
+      const chosen = {};
+      for (const sel of selects){
+        if (!sel.value){ alert('נא לבחור סוג דוח לכל קובץ.'); return; }
+        if (chosen[sel.value]){ alert('כל סוג דוח יכול להיות משויך לקובץ אחד בלבד בשלב זה.'); return; }
+        chosen[sel.value] = true;
+      }
+      // קריאה וטעינה לקונטקסט הקיים
+      for (const sel of selects){
+        const idx = +sel.dataset.index; const f = files[idx];
+        const rows = await readFile(f);
+        const headers = Object.keys(rows[0]||{});
+        if (sel.value === 'closures'){
+          state.rawClosures = rows; buildMappingUI(mapClosures, headers, {
+            'מספר עובד':'מספר עובד','שם עובד':'שם עובד','תאריך':'תאריך','סגירות':'סגירות','העברות להמתנה':'העברות להמתנה'
+          }, 'map_closures');
+        } else if (sel.value === 'actions'){
+          state.rawActions = rows; buildMappingUI(mapActions, headers, {
+            'מספר עובד':'מספר עובד','שם עובד':'שם עובד','תאריך':'תאריך','מיילים':'מיילים','שיחות':'שיחות','משימות':'משימות'
+          }, 'map_actions');
+        } else if (sel.value === 'presence'){
+          state.rawPresence = rows; buildMappingUI(mapPresence, headers, {
+            'מספר עובד':'מספר עובד','שם עובד':'שם עובד','תאריך':'תאריך','סוג חתימה':'סוג חתימה','שעות משרד':'שעות משרד','שעות בית':'שעות בית','שעות נוספות':'שעות נוספות','שעות חסרות':'שעות חסרות'
+          }, 'map_presence');
+        }
+      }
+      alert('הקבצים נטענו! אפשר למפות עמודות (אם צריך) ואז ללחוץ על "עבד/י נתונים".');
+      window.scrollTo({top: document.body.scrollHeight, behavior:'smooth'});
+    });
+
+    // === העלאה בשדות הנפרדים עדיין זמינה כחלופה ===
     elClosures.addEventListener('change', async (e)=>{
       const file = e.target.files[0]; if (!file) return;
       const rows = await readFile(file);
