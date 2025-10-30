@@ -1,739 +1,337 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>איחוד דוחות תפוקה יומית לפי עובד + חתימות</title>
-  <!-- Tailwind (CDN) -->
+  <title>מיזוג דוחות לפי מספר עובד</title>
+  <!-- Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Heebo font -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
+  <!-- SheetJS for CSV/XLSX parsing & export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-F0vJv7gqKxQbfD2KJgJX2M9jf4kqgx3QvfoV8F8J4m3zClg2mA9nJ0Xl1W3dF8mNY7yB1x4Oy5n7P2m3Vv6wGQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <style>
-    html { scroll-behavior: smooth; }
-    /* טבלה נגללת אופקית במובייל */
-    .table-scroll { overflow-x:auto; }
+    body { font-family: 'Heebo', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji','Segoe UI Emoji'; }
+    .card { @apply bg-white/80 dark:bg-slate-800/80 backdrop-blur rounded-2xl shadow p-4 border border-slate-200 dark:border-slate-700; }
+    .btn { @apply inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold border border-slate-300 dark:border-slate-600 hover:shadow; }
+    .primary { @apply bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700; }
+    .muted { @apply text-slate-600 dark:text-slate-300; }
+    .badge { @apply text-xs px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-600; }
+    .table-wrap { max-height: 60vh; overflow:auto; }
+    table { border-collapse: separate; border-spacing: 0; }
+    thead th { position: sticky; top: 0; background: #f8fafc; z-index: 1; }
+    .dark thead th { background: rgb(15 23 42); }
   </style>
-  <!-- SheetJS (XLSX) -->
-  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <!-- FileSaver for CSV export (fallback) -->
-  <script src="https://cdn.jsdelivr.net/npm/file-saver@2.0.5/dist/FileSaver.min.js"></script>
-  <!-- Chart.js -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
-<body class="bg-slate-950 text-slate-100 min-h-screen">
-  <header class="max-w-7xl mx-auto px-4 py-6">
-    <h1 class="text-2xl md:text-3xl font-bold">איחוד דוחות תפוקה יומית לפי עובד</h1>
-    <p class="text-slate-300 mt-1">מעלים 3 דוחות (סגירות/המתנות, פעולות, נוכחות/כוח אדם). המערכת מאחדת לפי <b>מספר עובד + תאריך</b>, מסכמת חתימות באותו יום (משרד/בית/נוסף), מחשבת KPI ויוצרת דשבורד.</p>
-  </header>
+<body class="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <header class="flex items-center gap-4 mb-6">
+      <h1 class="text-2xl md:text-3xl font-extrabold">מיזוג דוחות לפי מספר עובד</h1>
+      <span class="badge">גרסת דפדפן – אין התקנה</span>
+      <div class="ms-auto flex items-center gap-3">
+        <button id="themeToggle" class="btn">מצב כהה/בהיר</button>
+        <a id="downloadCsv" class="btn" href="#" download>הורדת דוח (CSV)</a>
+        <a id="downloadXlsx" class="btn" href="#" download>הורדת דוח (XLSX)</a>
+      </div>
+    </header>
 
-  <!-- שלב 1: העלאת 3 קבצים יחד -->
-  <section class="max-w-7xl mx-auto px-4 mb-6">
-    <div class="rounded-3xl bg-indigo-500/10 border border-indigo-500/30 p-5 md:p-6">
-      <h2 class="text-xl font-bold mb-2">שלב 1: העלאת שלושה קבצים (XLS / XLSX / CSV)</h2>
-      <p class="text-slate-300 mb-3">בחרי/גררי לכאן את שלושת הקבצים: (1) פעולות עובדים, (2) פתיחת פנייה/סגירות/העברות, (3) כח אדם/נוכחות. ניתן גם להשתמש בשלושת השדות למטה – שתי האפשרויות תואמות.</p>
-      <div class="grid md:grid-cols-5 gap-3 items-start">
-        <div class="md:col-span-4">
-          <input id="fileMulti" type="file" multiple accept=".xlsx,.xls,.csv" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
-        </div>
-        <div class="md:col-span-1 flex gap-2">
-          <button id="btnPrepareAssign" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600">שייך קבצים</button>
-        </div>
-      </div>
-      <div id="multiAssign" class="hidden mt-4 space-y-3"></div>
-      <div class="hidden mt-3" id="multiActions">
-        <button id="btnLoadAssigned" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600">טען קבצים משויכים</button>
-        <span class="text-sm text-slate-400 ml-2">לאחר טעינה תופיע מפה לעמודות לכל דוח</span>
-      </div>
-    </div>
-  </section>
-
-  <main class="max-w-7xl mx-auto px-4 pb-24">
-    <!-- קונפיגורציה כללית -->
-    <section class="rounded-3xl bg-white/5 border border-white/10 p-5 md:p-6 mb-6">
-      <h2 class="text-xl font-semibold mb-2">הנחיות עמודות צפויות (ניתן למפות לאחר העלאה)</h2>
-      <div class="grid md:grid-cols-3 gap-4 text-sm text-slate-300">
-        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <h3 class="font-bold text-slate-100 mb-1">דוח 1 — סגירות והעברה להמתנה</h3>
-          <ul class="list-disc pr-5 leading-6">
-            <li>מספר עובד</li>
-            <li>שם עובד</li>
-            <li>תאריך (YYYY-MM-DD או DD/MM/YYYY)</li>
-            <li>סגירות</li>
-            <li>העברות להמתנה</li>
-          </ul>
-        </div>
-        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <h3 class="font-bold text-slate-100 mb-1">דוח 2 — פעולות (מיילים/שיחות/משימות)</h3>
-          <ul class="list-disc pr-5 leading-6">
-            <li>מספר עובד</li>
-            <li>שם עובד</li>
-            <li>תאריך</li>
-            <li>מיילים</li>
-            <li>שיחות</li>
-            <li>משימות</li>
-          </ul>
-        </div>
-        <div class="bg-white/5 rounded-2xl p-4 border border-white/10">
-          <h3 class="font-bold text-slate-100 mb-1">דוח 3 — נוכחות/כח אדם (חתימות מרובות ביום)</h3>
-          <ul class="list-disc pr-5 leading-6">
-            <li>מספר עובד</li>
-            <li>שם עובד</li>
-            <li>תאריך</li>
-            <li>סוג חתימה ("משרד" / "בית" / "נוסף"…)</li>
-            <li>שעות משרד</li>
-            <li>שעות בית</li>
-            <li>שעות נוספות</li>
-            <li>שעות חסרות</li>
-          </ul>
-        </div>
-      </div>
-    </section>
-
-    <!-- העלאת קבצים -->
-    <section class="grid md:grid-cols-3 gap-4 mb-6">
-      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
-        <h3 class="font-semibold mb-2">1) סגירות/העברות</h3>
-        <input id="fileClosures" type="file" accept=".xlsx,.xls,.csv" class="w-full text-slate-200" />
-        <div id="mapClosures" class="hidden mt-3"></div>
-      </div>
-      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
-        <h3 class="font-semibold mb-2">2) פעולות</h3>
-        <input id="fileActions" type="file" accept=".xlsx,.xls,.csv" class="w-full text-slate-200" />
-        <div id="mapActions" class="hidden mt-3"></div>
-      </div>
-      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
-        <h3 class="font-semibold mb-2">3) נוכחות/כח אדם</h3>
-        <input id="filePresence" type="file" accept=".xlsx,.xls,.csv" class="w-full text-slate-200" />
-        <div id="mapPresence" class="hidden mt-3"></div>
-      </div>
-    </section>
-
-    <!-- משקולות KPI + פילטרים -->
-    <section class="rounded-3xl bg-white/5 border border-white/10 p-5 md:p-6 mb-6">
-      <div class="grid md:grid-cols-2 gap-6">
+    <section class="card mb-6">
+      <h2 class="text-xl font-semibold mb-3">העלאת קבצים (רק מה שיש – השאר לא חובה)</h2>
+      <p class="muted text-sm mb-4">אפשר להעלות כמה קבצים לכל סוג (CSV או XLSX). המערכת מזהה עמודות ומחברת אוטומטית לפי <strong>employee_id</strong> ו-<strong>date</strong>.</p>
+      <div class="grid md:grid-cols-2 gap-4">
         <div>
-          <h3 class="font-semibold mb-2">משקולות KPI</h3>
-          <div class="space-y-3 text-sm">
-            <div>
-              <label class="block">סגירות + העברות (<span id="w1v">0.5</span>)</label>
-              <input id="w1" type="range" min="0" max="1" step="0.05" value="0.5" class="w-full">
-            </div>
-            <div>
-              <label class="block">פעולות (מיילים+שיחות+משימות) (<span id="w2v">0.3</span>)</label>
-              <input id="w2" type="range" min="0" max="1" step="0.05" value="0.3" class="w-full">
-            </div>
-            <div>
-              <label class="block">שעות עבודה בפועל/8 (<span id="w3v">0.2</span>)</label>
-              <input id="w3" type="range" min="0" max="1" step="0.05" value="0.2" class="w-full">
-            </div>
-            <p class="text-slate-400">טיפ: עדיף שסכום המשקולות יהיה 1. המערכת לא מכריחה, אך מציגה אזהרה אם חורגים.</p>
-            <p id="weightsWarn" class="hidden text-amber-400 text-sm">אזהרה: סכום המשקולות שונה מ־1</p>
-          </div>
+          <label class="block font-medium mb-1">נוכחות ושעות (attendance)</label>
+          <input type="file" id="f_att" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
+          <p class="text-xs muted mt-1">עמודות צפויות: employee_id, employee_name, date, work_location, work_hours, absences, sick_hours, vacation_hours</p>
         </div>
         <div>
-          <h3 class="font-semibold mb-2">פילטרים</h3>
-          <div class="grid grid-cols-2 gap-3 text-sm">
-            <div>
-              <label class="block">מתאריך</label>
-              <input id="fromDate" type="date" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
-            </div>
-            <div>
-              <label class="block">עד תאריך</label>
-              <input id="toDate" type="date" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
-            </div>
-            <div class="col-span-2">
-              <label class="block">חיפוש עובד (שם/מספר)</label>
-              <input id="searchEmp" type="text" placeholder="לדוג׳: 1021 או דנה" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" />
-            </div>
-          </div>
-          <div class="flex flex-wrap gap-2 mt-3">
-            <button id="btnProcess" class="px-4 py-2 rounded-xl bg-indigo-500 hover:bg-indigo-600">עבד/י נתונים</button>
-            <button id="btnResetFilters" class="px-4 py-2 rounded-xl bg-slate-700 hover:bg-slate-600">נקה פילטרים</button>
-          </div>
+          <label class="block font-medium mb-1">פעילות – הועברו (activity)</label>
+          <input type="file" id="f_act" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
+          <p class="text-xs muted mt-1">עמודות: employee_id, employee_name, date, moved_to_closure, moved_to_pending</p>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">פעולות בפניות (actions)</label>
+          <input type="file" id="f_acn" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
+          <p class="text-xs muted mt-1">עמודות: employee_id, employee_name, date, emails_sent, calls_logged, tasks_logged</p>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">וואטסאפ (whatsapp)</label>
+          <input type="file" id="f_wht" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
+          <p class="text-xs muted mt-1">עמודות: employee_id, employee_name, date, whatsapp_received, whatsapp_replied</p>
+        </div>
+        <div>
+          <label class="block font-medium mb-1">פניות שנפתחו (openings)</label>
+          <input type="file" id="f_opn" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
+          <p class="text-xs muted mt-1">עמודות: employee_id, employee_name, date, tickets_opened</p>
+        </div>
+      </div>
+      <div class="mt-4 flex gap-2">
+        <button id="mergeBtn" class="btn primary">מיזוג ל‏דוח אחד</button>
+        <button id="clearBtn" class="btn">ניקוי הכל</button>
+      </div>
+    </section>
+
+    <section class="card mb-6">
+      <h3 class="text-lg font-semibold mb-3">מסננים</h3>
+      <div class="grid md:grid-cols-4 gap-3">
+        <div>
+          <label class="block text-sm mb-1">מספר עובד</label>
+          <input id="filterEmp" class="w-full rounded-lg border px-3 py-2 bg-white/70 dark:bg-slate-900/40 border-slate-300 dark:border-slate-600" placeholder="למשל: 1001" />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">תאריך מ-</label>
+          <input id="filterFrom" type="date" class="w-full rounded-lg border px-3 py-2 bg-white/70 dark:bg-slate-900/40 border-slate-300 dark:border-slate-600" />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">תאריך עד</label>
+          <input id="filterTo" type="date" class="w-full rounded-lg border px-3 py-2 bg-white/70 dark:bg-slate-900/40 border-slate-300 dark:border-slate-600" />
+        </div>
+        <div class="flex items-end">
+          <button id="applyFilter" class="btn w-full">החלת סינון</button>
         </div>
       </div>
     </section>
 
-    <!-- דשבורד -->
-    <section class="grid md:grid-cols-3 gap-4 mb-6">
-      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
-        <h3 class="font-semibold mb-2">Top KPI (יומי)</h3>
-        <canvas id="chartTopKPI" height="220"></canvas>
+    <section class="card">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xl font-semibold">דוח מאוחד</h2>
+        <span id="stats" class="muted text-sm"></span>
       </div>
-      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
-        <h3 class="font-semibold mb-2">סגירות מול שעות (יומי)</h3>
-        <canvas id="chartClosuresHours" height="220"></canvas>
-      </div>
-      <div class="rounded-3xl bg-white/5 border border-white/10 p-5">
-        <h3 class="font-semibold mb-2">חלוקת פעולות</h3>
-        <canvas id="chartActionsPie" height="220"></canvas>
-      </div>
-    </section>
-
-    <!-- טבלה מאוחדת -->
-    <section class="rounded-3xl bg-white/5 border border-white/10 p-5">
-      <div class="flex flex-wrap gap-2 mb-3">
-        <button id="btnExportXLSX" class="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-600">ייצוא לאקסל</button>
-        <button id="btnExportCSV" class="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600">ייצוא CSV</button>
-      </div>
-      <div class="table-scroll">
-        <table class="min-w-full text-sm" id="mergedTable">
-          <thead class="bg-white/10">
-            <tr>
-              <th class="px-3 py-2 text-right">תאריך</th>
-              <th class="px-3 py-2 text-right">מס׳ עובד</th>
-              <th class="px-3 py-2 text-right">שם עובד</th>
-              <th class="px-3 py-2 text-right">סגירות</th>
-              <th class="px-3 py-2 text-right">העברות</th>
-              <th class="px-3 py-2 text-right">מיילים</th>
-              <th class="px-3 py-2 text-right">שיחות</th>
-              <th class="px-3 py-2 text-right">משימות</th>
-              <th class="px-3 py-2 text-right">שעות משרד</th>
-              <th class="px-3 py-2 text-right">שעות בית</th>
-              <th class="px-3 py-2 text-right">שעות נוספות</th>
-              <th class="px-3 py-2 text-right">שעות חסרות</th>
-              <th class="px-3 py-2 text-right">סה"כ שעות בפועל</th>
-              <th class="px-3 py-2 text-right">מס׳ חתימות ביום</th>
-              <th class="px-3 py-2 text-right">KPI</th>
+      <div class="table-wrap">
+        <table id="reportTable" class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-200 dark:border-slate-700">
+              <th class="p-2 text-right">date</th>
+              <th class="p-2 text-right">employee_id</th>
+              <th class="p-2 text-right">employee_name</th>
+              <th class="p-2 text-right">work_hours</th>
+              <th class="p-2 text-right">absences</th>
+              <th class="p-2 text-right">sick_hours</th>
+              <th class="p-2 text-right">vacation_hours</th>
+              <th class="p-2 text-right">moved_to_closure</th>
+              <th class="p-2 text-right">moved_to_pending</th>
+              <th class="p-2 text-right">emails_sent</th>
+              <th class="p-2 text-right">calls_logged</th>
+              <th class="p-2 text-right">tasks_logged</th>
+              <th class="p-2 text-right">whatsapp_received</th>
+              <th class="p-2 text-right">whatsapp_replied</th>
+              <th class="p-2 text-right">tickets_opened</th>
             </tr>
           </thead>
-          <tbody id="mergedBody" class="divide-y divide-white/10"></tbody>
+          <tbody id="reportBody"></tbody>
         </table>
       </div>
     </section>
-  </main>
+  </div>
 
   <script>
-    // ===== Utilities =====
-    const lstore = {
-      get(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } },
-      set(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+    // --- Theme toggle ---
+    const root = document.documentElement;
+    const themeToggle = document.getElementById('themeToggle');
+    function setTheme(dark){ document.documentElement.classList.toggle('dark', !!dark); }
+    setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
+    themeToggle.addEventListener('click', ()=> setTheme(!document.documentElement.classList.contains('dark')));
+
+    // Helpers
+    const NUM_COLS = [
+      'work_hours','absences','sick_hours','vacation_hours',
+      'moved_to_closure','moved_to_pending',
+      'emails_sent','calls_logged','tasks_logged',
+      'whatsapp_received','whatsapp_replied','tickets_opened'
+    ];
+
+    const DEFAULT_ROW = {
+      work_hours:0, absences:0, sick_hours:0, vacation_hours:0,
+      moved_to_closure:0, moved_to_pending:0,
+      emails_sent:0, calls_logged:0, tasks_logged:0,
+      whatsapp_received:0, whatsapp_replied:0, tickets_opened:0
     };
 
-    const parseDate = (val) => {
-      if (!val) return null;
-      if (val instanceof Date) return val.toISOString().slice(0,10);
-      // try Excel serial
-      if (typeof val === 'number') {
-        const d = XLSX.SSF.parse_date_code(val);
-        if (d) {
-          const js = new Date(Date.UTC(d.y, d.m-1, d.d));
-          return js.toISOString().slice(0,10);
-        }
-      }
-      // normalize strings
-      const s = String(val).trim();
-      // 2025-10-28
-      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      // 28/10/2025 or 28.10.2025
-      const m = s.match(/^(\d{1,2})[\/.](\d{1,2})[\/.](\d{2,4})$/);
-      if (m) {
-        const d = m[1].padStart(2,'0');
-        const mo = m[2].padStart(2,'0');
-        const y = m[3].length===2 ? ('20'+m[3]) : m[3];
-        return `${y}-${mo}-${d}`;
-      }
-      // fallback: Date()
-      const dt = new Date(s);
-      return isNaN(+dt) ? null : dt.toISOString().slice(0,10);
-    };
-
-    const toNumber = (v) => {
-      if (v === null || v === undefined || v === '') return 0;
-      const n = Number(String(v).replace(/[,\s]/g,''));
-      return isNaN(n) ? 0 : n;
-    };
-
-    // ===== File Parsing =====
-    async function readFile(file) {
-      return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          try {
-            const data = new Uint8Array(e.target.result);
-            const wb = XLSX.read(data, {type:'array'});
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const json = XLSX.utils.sheet_to_json(ws, {defval: ''});
-            resolve(json);
-          } catch (err) { reject(err); }
-        };
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
-      });
+    function parseDate(v){
+      if(!v) return null;
+      // Try YYYY-MM-DD first
+      const d = new Date(v);
+      if(!isNaN(d)) return d;
+      // Try DD/MM/YYYY
+      const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if(m){ return new Date(+m[3], +m[2]-1, +m[1]); }
+      return null;
     }
 
-    function buildMappingUI(container, headers, defaults, storageKey){
-      container.innerHTML = '';
-      container.classList.remove('hidden');
-      const fields = Object.keys(defaults);
-      const saved = lstore.get(storageKey, {});
-      fields.forEach((f)=>{ if (saved[f]) defaults[f]=saved[f]; });
-
-      const wrap = document.createElement('div');
-      wrap.className = 'grid grid-cols-2 gap-3';
-      fields.forEach(field => {
-        const div = document.createElement('div');
-        div.innerHTML = `
-          <label class="text-sm text-slate-300">${field}</label>
-          <select data-field="${field}" class="w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2 mt-1"></select>
-        `;
-        wrap.appendChild(div);
-      });
-      container.appendChild(wrap);
-
-      // fill options
-      const selects = container.querySelectorAll('select');
-      selects.forEach(sel => {
-        const f = sel.dataset.field;
-        const optEmpty = document.createElement('option'); optEmpty.value=''; optEmpty.textContent='— בחרי עמודה —'; sel.appendChild(optEmpty);
-        headers.forEach(h => {
-          const o = document.createElement('option'); o.value=h; o.textContent=h; sel.appendChild(o);
-        });
-        if (defaults[f] && headers.includes(defaults[f])) sel.value = defaults[f];
-        sel.addEventListener('change', ()=>{
-          saved[f]=sel.value; lstore.set(storageKey, saved);
-        })
-      });
-    }
-
-    function remapRow(row, map){
-      const out = {};
-      for (const [target, src] of Object.entries(map)){
-        out[target] = src ? row[src] : '';
+    async function readFiles(fileList){
+      const out = [];
+      for(const file of fileList){
+        const data = await file.arrayBuffer();
+        const wb = XLSX.read(data, {type:'array'});
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(ws, {defval:""});
+        out.push(...json);
       }
       return out;
     }
 
-    // ===== State =====
-    const state = {
-      closures: [], actions: [], presence: [],
-      maps: { closures:{}, actions:{}, presence:{} },
-      merged: [],
-      charts: {kpi:null, ch:null, pie:null}
-    };
+    function toNumber(v){
+      const n = Number(String(v).replace(/[,\s]/g, ''));
+      return isFinite(n) ? n : 0;
+    }
 
-    // ===== DOM =====
-    const elClosures = document.getElementById('fileClosures');
-    const elActions = document.getElementById('fileActions');
-    const elPresence = document.getElementById('filePresence');
-    const mapClosures = document.getElementById('mapClosures');
-    const mapActions = document.getElementById('mapActions');
-    const mapPresence = document.getElementById('mapPresence');
-    // multi upload DOM
-    const fileMulti = document.getElementById('fileMulti');
-    const btnPrepareAssign = document.getElementById('btnPrepareAssign');
-    const multiAssign = document.getElementById('multiAssign');
-    const multiActions = document.getElementById('multiActions');
-    const btnLoadAssigned = document.getElementById('btnLoadAssigned');
-    const btnProcess = document.getElementById('btnProcess');
-    const btnResetFilters = document.getElementById('btnResetFilters');
-    const w1 = document.getElementById('w1');
-    const w2 = document.getElementById('w2');
-    const w3 = document.getElementById('w3');
-    const w1v = document.getElementById('w1v');
-    const w2v = document.getElementById('w2v');
-    const w3v = document.getElementById('w3v');
-    const weightsWarn = document.getElementById('weightsWarn');
-    const fromDate = document.getElementById('fromDate');
-    const toDate = document.getElementById('toDate');
-    const searchEmp = document.getElementById('searchEmp');
-    const tbody = document.getElementById('mergedBody');
+    function normalizeRow(row){
+      // Lowercase keys
+      const norm = {};
+      for(const k in row){ if(!Object.hasOwn(row,k)) continue; norm[k.trim().toLowerCase()] = row[k]; }
+      return norm;
+    }
 
-    // ===== Events: upload & mapping =====
-    // Multi upload flow (Step 1)
-    btnPrepareAssign?.addEventListener('click', ()=>{
-      const files = Array.from(fileMulti?.files||[]);
-      if (!files.length){ alert('נא לבחור 3 קבצים לפחות (XLS/XLSX/CSV).'); return; }
-      multiAssign.innerHTML = '';
-      multiAssign.classList.remove('hidden');
-      multiActions.classList.remove('hidden');
-      files.forEach((f,idx)=>{
-        const row = document.createElement('div');
-        row.className = 'bg-white/5 border border-white/10 rounded-2xl p-3 grid md:grid-cols-3 gap-3 items-center';
-        row.innerHTML = `
-          <div class="text-sm">
-            <div class="font-semibold text-slate-100">${f.name}</div>
-            <div class="text-slate-400">${Math.round(f.size/1024)} KB</div>
-          </div>
-          <div>
-            <label class="text-sm block mb-1">סוג הדוח</label>
-            <select class="assignType w-full bg-white/5 border border-white/10 rounded-xl px-3 py-2" data-index="${idx}">
-              <option value="">— בחרי —</option>
-              <option value="actions">דוח פעולות (מיילים/שיחות/משימות)</option>
-              <option value="closures">דוח פתיחת פנייה/סגירות/העברות</option>
-              <option value="presence">דוח כח אדם/נוכחות</option>
-            </select>
-          </div>
-          <div class="text-xs text-slate-400">
-            טיפ: אם תתבלבלי תמיד אפשר לשנות וללחוץ שוב על "טען קבצים משויכים".
-          </div>
-        `;
-        multiAssign.appendChild(row);
-      });
-    });
+    function key(empId, date){
+      return `${empId}__${date}`;
+    }
 
-    btnLoadAssigned?.addEventListener('click', async ()=>{
-      const files = Array.from(fileMulti?.files||[]);
-      if (!files.length){ alert('לא נבחרו קבצים.'); return; }
-      const selects = multiAssign.querySelectorAll('select.assignType');
-      // מניעת שיוך כפול לאותו סוג
-      const chosen = {};
-      for (const sel of selects){
-        if (!sel.value){ alert('נא לבחור סוג דוח לכל קובץ.'); return; }
-        if (chosen[sel.value]){ alert('כל סוג דוח יכול להיות משויך לקובץ אחד בלבד בשלב זה.'); return; }
-        chosen[sel.value] = true;
-      }
-      // קריאה וטעינה לקונטקסט הקיים
-      for (const sel of selects){
-        const idx = +sel.dataset.index; const f = files[idx];
-        const rows = await readFile(f);
-        const headers = Object.keys(rows[0]||{});
-        if (sel.value === 'closures'){
-          state.rawClosures = rows; buildMappingUI(mapClosures, headers, {
-            'מספר עובד':'מספר עובד','שם עובד':'שם עובד','תאריך':'תאריך','סגירות':'סגירות','העברות להמתנה':'העברות להמתנה'
-          }, 'map_closures');
-        } else if (sel.value === 'actions'){
-          state.rawActions = rows; buildMappingUI(mapActions, headers, {
-            'מספר עובד':'מספר עובד','שם עובד':'שם עובד','תאריך':'תאריך','מיילים':'מיילים','שיחות':'שיחות','משימות':'משימות'
-          }, 'map_actions');
-        } else if (sel.value === 'presence'){
-          state.rawPresence = rows; buildMappingUI(mapPresence, headers, {
-            'מספר עובד':'מספר עובד','שם עובד':'שם עובד','תאריך':'תאריך','סוג חתימה':'סוג חתימה','שעות משרד':'שעות משרד','שעות בית':'שעות בית','שעות נוספות':'שעות נוספות','שעות חסרות':'שעות חסרות'
-          }, 'map_presence');
-        }
-      }
-      alert('הקבצים נטענו! אפשר למפות עמודות (אם צריך) ואז ללחוץ על "עבד/י נתונים".');
-      window.scrollTo({top: document.body.scrollHeight, behavior:'smooth'});
-    });
-
-    // === העלאה בשדות הנפרדים עדיין זמינה כחלופה ===
-    elClosures.addEventListener('change', async (e)=>{
-      const file = e.target.files[0]; if (!file) return;
-      const rows = await readFile(file);
-      state.rawClosures = rows; // for headers
-      const headers = Object.keys(rows[0]||{});
-      buildMappingUI(mapClosures, headers, {
-        'מספר עובד':'מספר עובד',
-        'שם עובד':'שם עובד',
-        'תאריך':'תאריך',
-        'סגירות':'סגירות',
-        'העברות להמתנה':'העברות להמתנה'
-      }, 'map_closures');
-    });
-
-    elActions.addEventListener('change', async (e)=>{
-      const file = e.target.files[0]; if (!file) return;
-      const rows = await readFile(file);
-      state.rawActions = rows;
-      const headers = Object.keys(rows[0]||{});
-      buildMappingUI(mapActions, headers, {
-        'מספר עובד':'מספר עובד',
-        'שם עובד':'שם עובד',
-        'תאריך':'תאריך',
-        'מיילים':'מיילים',
-        'שיחות':'שיחות',
-        'משימות':'משימות'
-      }, 'map_actions');
-    });
-
-    elPresence.addEventListener('change', async (e)=>{
-      const file = e.target.files[0]; if (!file) return;
-      const rows = await readFile(file);
-      state.rawPresence = rows;
-      const headers = Object.keys(rows[0]||{});
-      buildMappingUI(mapPresence, headers, {
-        'מספר עובד':'מספר עובד',
-        'שם עובד':'שם עובד',
-        'תאריך':'תאריך',
-        'סוג חתימה':'סוג חתימה',
-        'שעות משרד':'שעות משרד',
-        'שעות בית':'שעות בית',
-        'שעות נוספות':'שעות נוספות',
-        'שעות חסרות':'שעות חסרות'
-      }, 'map_presence');
-    });
-
-    // Weights UI
-    [w1,w2,w3].forEach(inp=>{
-      const sync = ()=>{
-        w1v.textContent = (+w1.value).toFixed(2);
-        w2v.textContent = (+w2.value).toFixed(2);
-        w3v.textContent = (+w3.value).toFixed(2);
-        const s = (+w1.value)+(+w2.value)+(+w3.value);
-        weightsWarn.classList.toggle('hidden', Math.abs(s-1)<1e-6);
+    // Merge engine
+    async function mergeAll(){
+      const files = {
+        attendance: document.getElementById('f_att').files,
+        activity:   document.getElementById('f_act').files,
+        actions:    document.getElementById('f_acn').files,
+        whatsapp:   document.getElementById('f_wht').files,
+        openings:   document.getElementById('f_opn').files,
       };
-      inp.addEventListener('input', sync); sync();
-    });
 
-    btnResetFilters.addEventListener('click', ()=>{
-      fromDate.value = '';
-      toDate.value = '';
-      searchEmp.value = '';
-      renderTable(state.merged);
-      renderCharts(state.merged);
-    });
+      const store = new Map(); // key: empId__YYYY-MM-DD => row
 
-    btnProcess.addEventListener('click', ()=>{
-      processAll();
-    });
-
-    function getMap(key){ return lstore.get(key, {}); }
-
-    function processAll(){
-      if (!state.rawClosures || !state.rawActions || !state.rawPresence){
-        alert('נא להעלות את שלושת הקבצים.');
-        return;
-      }
-      const mc = getMap('map_closures');
-      const ma = getMap('map_actions');
-      const mp = getMap('map_presence');
-
-      // Remap & normalize
-      const closures = (state.rawClosures||[]).map(r=>{
-        const o = remapRow(r, mc);
-        return {
-          empId: String(o['מספר עובד']||'').trim(),
-          empName: String(o['שם עובד']||'').trim(),
-          date: parseDate(o['תאריך']),
-          closures: toNumber(o['סגירות']),
-          transfers: toNumber(o['העברות להמתנה'])
+      // Processor per category
+      async function process(category, mapFn){
+        if(!files[category] || files[category].length===0) return;
+        const rows = await readFiles(files[category]);
+        for(const r0 of rows){
+          const r = normalizeRow(r0);
+          const empId = (r.employee_id ?? r['מספר עובד'] ?? r['id'] ?? '').toString().trim();
+          const empName = (r.employee_name ?? r['שם עובד'] ?? r['name'] ?? '').toString().trim();
+          const dt = parseDate(r.date || r['תאריך'] || r['date ']);
+          if(!empId || !dt) continue; // must have id+date
+          const ymd = dt.toISOString().slice(0,10);
+          const k = key(empId, ymd);
+          if(!store.has(k)) store.set(k, { date: ymd, employee_id: empId, employee_name: empName, ...structuredClone(DEFAULT_ROW) });
+          const row = store.get(k);
+          mapFn(r, row);
+          // prefer last non-empty name
+          if(empName) row.employee_name = empName;
         }
-      }).filter(x=>x.empId && x.date);
-
-      const actions = (state.rawActions||[]).map(r=>{
-        const o = remapRow(r, ma);
-        return {
-          empId: String(o['מספר עובד']||'').trim(),
-          empName: String(o['שם עובד']||'').trim(),
-          date: parseDate(o['תאריך']),
-          emails: toNumber(o['מיילים']),
-          calls: toNumber(o['שיחות']),
-          tasks: toNumber(o['משימות'])
-        }
-      }).filter(x=>x.empId && x.date);
-
-      const presenceRaw = (state.rawPresence||[]).map(r=>{
-        const o = remapRow(r, mp);
-        return {
-          empId: String(o['מספר עובד']||'').trim(),
-          empName: String(o['שם עובד']||'').trim(),
-          date: parseDate(o['תאריך']),
-          signType: String(o['סוג חתימה']||'').trim(),
-          office: toNumber(o['שעות משרד']),
-          home: toNumber(o['שעות בית']),
-          overtime: toNumber(o['שעות נוספות']),
-          missing: toNumber(o['שעות חסרות'])
-        }
-      }).filter(x=>x.empId && x.date);
-
-      // Group presence by empId+date (sum hours, count signings)
-      const presenceMap = new Map();
-      for (const p of presenceRaw){
-        const key = p.empId+'|'+p.date;
-        const prev = presenceMap.get(key) || {empId:p.empId, empName:p.empName, date:p.date, office:0, home:0, overtime:0, missing:0, signatures:0};
-        prev.office += p.office;
-        prev.home += p.home;
-        prev.overtime += p.overtime;
-        prev.missing += p.missing;
-        prev.signatures += 1;
-        // prefer non-empty name
-        if (!prev.empName && p.empName) prev.empName = p.empName;
-        presenceMap.set(key, prev);
       }
 
-      // Aggregate closures/actions by empId+date as well (in case of duplicates)
-      const aggMap = (rows, fields) => {
-        const m = new Map();
-        for (const r of rows){
-          const key = r.empId+'|'+r.date;
-          const prev = m.get(key) || {empId:r.empId, empName:r.empName, date:r.date};
-          for (const f of fields){ prev[f] = (prev[f]||0) + (r[f]||0); }
-          if (!prev.empName && r.empName) prev.empName = r.empName;
-          m.set(key, prev);
-        }
-        return m;
-      }
-      const clMap = aggMap(closures, ['closures','transfers']);
-      const acMap = aggMap(actions, ['emails','calls','tasks']);
-
-      // Union keys
-      const keys = new Set([...clMap.keys(), ...acMap.keys(), ...presenceMap.keys()]);
-      const res = [];
-      const W1 = +w1.value, W2 = +w2.value, W3 = +w3.value;
-
-      keys.forEach(key => {
-        const [empId, date] = key.split('|');
-        const c = clMap.get(key) || {empId, empName:'', date, closures:0, transfers:0};
-        const a = acMap.get(key) || {empId, empName:'', date, emails:0, calls:0, tasks:0};
-        const p = presenceMap.get(key) || {empId, empName:'', date, office:0, home:0, overtime:0, missing:0, signatures:0};
-        const empName = c.empName || a.empName || p.empName || '';
-        const totalHours = (p.office + p.home + p.overtime) - p.missing;
-        const kpi = ( ( (c.closures + c.transfers) * W1 ) + ( (a.emails + a.calls + a.tasks) * W2 ) + ( (totalHours/8) * W3 ) );
-        res.push({
-          date,
-          empId,
-          empName,
-          closures: c.closures||0,
-          transfers: c.transfers||0,
-          emails: a.emails||0,
-          calls: a.calls||0,
-          tasks: a.tasks||0,
-          office: p.office||0,
-          home: p.home||0,
-          overtime: p.overtime||0,
-          missing: p.missing||0,
-          totalHours: +totalHours.toFixed(2),
-          signatures: p.signatures||0,
-          kpi: +kpi.toFixed(2)
-        });
+      await process('attendance', (r, row)=>{
+        row.work_location = (r.work_location || r['מקום עבודה'] || row.work_location || '').toString();
+        row.work_hours += toNumber(r.work_hours ?? r['שעות עבודה']);
+        row.absences   += toNumber(r.absences   ?? r['היעדרויות']);
+        row.sick_hours += toNumber(r.sick_hours ?? r['מחלה']);
+        row.vacation_hours += toNumber(r.vacation_hours ?? r['חופש']);
       });
 
-      // Save + filter + render
-      state.merged = res.sort((a,b)=> (a.date<b.date? -1: a.date>b.date? 1: a.empId.localeCompare(b.empId)));
-      applyFilters();
+      await process('activity', (r, row)=>{
+        row.moved_to_closure += toNumber(r.moved_to_closure ?? r['הועברו לסגירה']);
+        row.moved_to_pending += toNumber(r.moved_to_pending ?? r['הועברו להמתנה']);
+      });
+
+      await process('actions', (r, row)=>{
+        row.emails_sent += toNumber(r.emails_sent ?? r['מיילים']);
+        row.calls_logged += toNumber(r.calls_logged ?? r['שיחות']);
+        row.tasks_logged += toNumber(r.tasks_logged ?? r['משימות']);
+      });
+
+      await process('whatsapp', (r, row)=>{
+        row.whatsapp_received += toNumber(r.whatsapp_received ?? r['וואטסאפ התקבל']);
+        row.whatsapp_replied += toNumber(r.whatsapp_replied ?? r['וואטסאפ נענה']);
+      });
+
+      await process('openings', (r, row)=>{
+        row.tickets_opened += toNumber(r.tickets_opened ?? r['פניות שנפתחו']);
+      });
+
+      // To array & sort
+      const arr = [...store.values()].sort((a,b)=>{
+        if(a.date!==b.date) return a.date.localeCompare(b.date);
+        return (a.employee_id||'').localeCompare(b.employee_id||'');
+      });
+
+      renderTable(arr);
+      enableDownloads(arr);
     }
 
-    function applyFilters(){
-      let data = [...state.merged];
-      const fd = fromDate.value || null;
-      const td = toDate.value || null;
-      if (fd) data = data.filter(r=> r.date >= fd);
-      if (td) data = data.filter(r=> r.date <= td);
-      const q = searchEmp.value.trim();
-      if (q) {
-        const ql = q.toLowerCase();
-        data = data.filter(r=> r.empId.includes(q) || (r.empName||'').toLowerCase().includes(ql));
-      }
-      renderTable(data);
-      renderCharts(data);
-    }
-
-    [fromDate, toDate, searchEmp].forEach(el => el.addEventListener('input', applyFilters));
-
+    // Render
     function renderTable(rows){
-      tbody.innerHTML = '';
-      const frag = document.createDocumentFragment();
-      rows.forEach(r => {
+      const tb = document.getElementById('reportBody');
+      tb.innerHTML = '';
+      const fEmp = document.getElementById('filterEmp').value.trim();
+      const fFrom = document.getElementById('filterFrom').value;
+      const fTo   = document.getElementById('filterTo').value;
+      let shown = 0;
+      for(const r of rows){
+        if(fEmp && r.employee_id!==fEmp) continue;
+        if(fFrom && r.date < fFrom) continue;
+        if(fTo && r.date > fTo) continue;
         const tr = document.createElement('tr');
+        tr.className = 'border-b border-slate-100 dark:border-slate-800 hover:bg-indigo-50/40 dark:hover:bg-indigo-900/20';
         tr.innerHTML = `
-          <td class="px-3 py-2">${r.date}</td>
-          <td class="px-3 py-2">${r.empId}</td>
-          <td class="px-3 py-2">${r.empName||''}</td>
-          <td class="px-3 py-2">${r.closures}</td>
-          <td class="px-3 py-2">${r.transfers}</td>
-          <td class="px-3 py-2">${r.emails}</td>
-          <td class="px-3 py-2">${r.calls}</td>
-          <td class="px-3 py-2">${r.tasks}</td>
-          <td class="px-3 py-2">${r.office}</td>
-          <td class="px-3 py-2">${r.home}</td>
-          <td class="px-3 py-2">${r.overtime}</td>
-          <td class="px-3 py-2">${r.missing}</td>
-          <td class="px-3 py-2">${r.totalHours}</td>
-          <td class="px-3 py-2">${r.signatures}</td>
-          <td class="px-3 py-2 font-semibold">${r.kpi}</td>
-        `;
-        frag.appendChild(tr);
-      });
-      tbody.appendChild(frag);
-    }
-
-    function sum(arr, f){ return arr.reduce((s,x)=> s + (x[f]||0), 0); }
-
-    function destroyChart(c){ if (c) { c.destroy(); } }
-
-    function renderCharts(rows){
-      // KPI Top — נבחר 10 רשומות KPI גבוהות בטווח הנוכחי
-      const top = [...rows].sort((a,b)=> b.kpi - a.kpi).slice(0,10);
-      const labelsTop = top.map(r=> `${r.empName||r.empId} • ${r.date}`);
-      const dataTop = top.map(r=> r.kpi);
-
-      destroyChart(state.charts.kpi);
-      state.charts.kpi = new Chart(document.getElementById('chartTopKPI'), {
-        type:'bar',
-        data:{ labels:labelsTop, datasets:[{ label:'KPI', data:dataTop }]},
-        options:{ responsive:true, plugins:{ legend:{display:false}}, scales:{ x:{ticks:{autoSkip:false}} } }
-      });
-
-      // Closures vs Hours
-      const byDay = {};
-      for (const r of rows){
-        if (!byDay[r.date]) byDay[r.date] = {closures:0, hours:0};
-        byDay[r.date].closures += (r.closures + r.transfers);
-        byDay[r.date].hours += r.totalHours;
+          <td class="p-2">${r.date||''}</td>
+          <td class="p-2">${r.employee_id||''}</td>
+          <td class="p-2">${r.employee_name||''}</td>
+          <td class="p-2 text-right">${r.work_hours||0}</td>
+          <td class="p-2 text-right">${r.absences||0}</td>
+          <td class="p-2 text-right">${r.sick_hours||0}</td>
+          <td class="p-2 text-right">${r.vacation_hours||0}</td>
+          <td class="p-2 text-right">${r.moved_to_closure||0}</td>
+          <td class="p-2 text-right">${r.moved_to_pending||0}</td>
+          <td class="p-2 text-right">${r.emails_sent||0}</td>
+          <td class="p-2 text-right">${r.calls_logged||0}</td>
+          <td class="p-2 text-right">${r.tasks_logged||0}</td>
+          <td class="p-2 text-right">${r.whatsapp_received||0}</td>
+          <td class="p-2 text-right">${r.whatsapp_replied||0}</td>
+          <td class="p-2 text-right">${r.tickets_opened||0}</td>`;
+        tb.appendChild(tr);
+        shown++;
       }
-      const dates = Object.keys(byDay).sort();
-      const closuresArr = dates.map(d=> byDay[d].closures);
-      const hoursArr = dates.map(d=> byDay[d].hours);
-
-      destroyChart(state.charts.ch);
-      state.charts.ch = new Chart(document.getElementById('chartClosuresHours'), {
-        type:'line',
-        data:{ labels:dates, datasets:[
-          { label:'סגירות+העברות', data:closuresArr },
-          { label:'סה"כ שעות', data:hoursArr }
-        ]},
-        options:{ responsive:true }
-      });
-
-      // Actions pie (total on filtered set)
-      const emails = sum(rows,'emails');
-      const calls = sum(rows,'calls');
-      const tasks = sum(rows,'tasks');
-
-      destroyChart(state.charts.pie);
-      state.charts.pie = new Chart(document.getElementById('chartActionsPie'), {
-        type:'pie',
-        data:{ labels:['מיילים','שיחות','משימות'], datasets:[{ data:[emails, calls, tasks] }]},
-        options:{ responsive:true }
-      });
+      document.getElementById('stats').textContent = `שורות מוצגות: ${shown}`;
+      // cache last rows for export
+      window.__LAST_ROWS__ = rows;
     }
 
-    // ===== Export =====
-    function exportToXLSX(rows){
-      const ws = XLSX.utils.json_to_sheet(rows.map(r=>({
-        'תאריך': r.date,
-        'מס׳ עובד': r.empId,
-        'שם עובד': r.empName,
-        'סגירות': r.closures,
-        'העברות': r.transfers,
-        'מיילים': r.emails,
-        'שיחות': r.calls,
-        'משימות': r.tasks,
-        'שעות משרד': r.office,
-        'שעות בית': r.home,
-        'שעות נוספות': r.overtime,
-        'שעות חסרות': r.missing,
-        'סה"כ שעות בפועל': r.totalHours,
-        'מס׳ חתימות ביום': r.signatures,
-        'KPI': r.kpi
-      })));
+    // Downloads
+    function enableDownloads(rows){
+      const headers = [
+        'date','employee_id','employee_name','work_hours','absences','sick_hours','vacation_hours',
+        'moved_to_closure','moved_to_pending','emails_sent','calls_logged','tasks_logged','whatsapp_received','whatsapp_replied','tickets_opened'
+      ];
+      const ws = XLSX.utils.json_to_sheet(rows, {header: headers});
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'Merged');
-      XLSX.writeFile(wb, 'merged_kpi.xlsx');
+      XLSX.utils.book_append_sheet(wb, ws, 'report');
+
+      // CSV
+      const csv = XLSX.utils.sheet_to_csv(ws);
+      const blobCsv = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+      const urlCsv = URL.createObjectURL(blobCsv);
+      const aCsv = document.getElementById('downloadCsv');
+      aCsv.href = urlCsv; aCsv.download = `merged_report_${new Date().toISOString().slice(0,10)}.csv`;
+
+      // XLSX
+      const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
+      const blobX = new Blob([wbout], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      const urlX = URL.createObjectURL(blobX);
+      const aX = document.getElementById('downloadXlsx');
+      aX.href = urlX; aX.download = `merged_report_${new Date().toISOString().slice(0,10)}.xlsx`;
     }
 
-    function exportToCSV(rows){
-      const headers = ['date','empId','empName','closures','transfers','emails','calls','tasks','office','home','overtime','missing','totalHours','signatures','kpi'];
-      const csv = [headers.join(',')].concat(rows.map(r=> headers.map(h=> JSON.stringify(r[h]??'')).join(','))).join('\n');
-      const blob = new Blob([csv], {type:'text/csv;charset=utf-8'});
-      saveAs(blob, 'merged_kpi.csv');
-    }
-
-    document.getElementById('btnExportXLSX').addEventListener('click', ()=> exportToXLSX(currentFiltered()));
-    document.getElementById('btnExportCSV').addEventListener('click', ()=> exportToCSV(currentFiltered()));
-
-    function currentFiltered(){
-      // recreate filter on demand (simple way to ensure sync)
-      let data = [...state.merged];
-      const fd = fromDate.value || null;
-      const td = toDate.value || null;
-      if (fd) data = data.filter(r=> r.date >= fd);
-      if (td) data = data.filter(r=> r.date <= td);
-      const q = searchEmp.value.trim();
-      if (q) {
-        const ql = q.toLowerCase();
-        data = data.filter(r=> r.empId.includes(q) || (r.empName||'').toLowerCase().includes(ql));
-      }
-      return data;
-    }
+    // Events
+    document.getElementById('mergeBtn').addEventListener('click', mergeAll);
+    document.getElementById('clearBtn').addEventListener('click', ()=>{
+      ['f_att','f_act','f_acn','f_wht','f_opn'].forEach(id=> document.getElementById(id).value='');
+      document.getElementById('reportBody').innerHTML='';
+      document.getElementById('stats').textContent='';
+      window.__LAST_ROWS__ = [];
+    });
+    document.getElementById('applyFilter').addEventListener('click', ()=>{
+      renderTable(window.__LAST_ROWS__ || []);
+    });
   </script>
 </body>
 </html>
