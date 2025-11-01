@@ -1,568 +1,549 @@
 <!doctype html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מיזוג דוחות לפי מספר עובד</title>
-  <!-- Tailwind -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Heebo -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;600;800&display=swap" rel="stylesheet">
-  <!-- SheetJS -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" integrity="sha512-F0vJv7gqKxQbfD2KJgJX2M9jf4kqgx3QvfoV8F8J4m3zClg2mA9nJ0Xl1W3dF8mNY7yB1x4Oy5n7P2m3Vv6wGQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <style>
-    body { font-family: 'Heebo', system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial; }
-    .card { background: rgba(255,255,255,.85); border:1px solid #e2e8f0; border-radius: 1rem; backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(2,6,23,.08); padding: 1rem; }
-    .dark .card { background: rgba(15,23,42,.85); border-color:#334155; }
-    .btn { display:inline-flex; align-items:center; justify-content:center; border-radius:.75rem; padding:.5rem 1rem; font-weight:600; border:1px solid #cbd5e1; }
-    .btn:hover { box-shadow: 0 4px 16px rgba(2,6,23,.08); }
-    .primary { background:#4f46e5; color:#fff; border-color:#4f46e5; }
-    .table-wrap { max-height: 52vh; overflow:auto; }
-    thead th { position:sticky; top:0; background:#f8fafc; z-index:1; }
-    .dark thead th { background:#0f172a; }
-    .inp { width:100%; border:1px solid #cbd5e1; background:#fff; padding:.5rem .75rem; border-radius:.75rem; }
-    .dark .inp { border-color:#475569; background:#0b1220; color:#e2e8f0; }
-    .badge { font-size:.75rem; padding:.15rem .5rem; border-radius:999px; background:#f1f5f9; border:1px solid #e2e8f0; color:#334155; }
-    .dark .badge { background:#0f172a; border-color:#334155; color:#e2e8f0; }
-    .tabs button[aria-selected="true"]{ background:#eef2ff; border-color:#4f46e5; }
-    .dark .tabs button[aria-selected="true"]{ background:#1e1b4b; border-color:#6366f1; color:#e0e7ff; }
-    .err { color:#b91c1c; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>מיזוג דוחות (CSV בלבד, ללא אינטרנט)</title>
+<style>
+  :root{--bg:#f7f8fa;--card:#fff;--ink:#0f172a;--muted:#475569;--acc:#4f46e5;}
+  html,body{margin:0;height:100%;font-family:system-ui,-apple-system,Segoe UI,Roboto,Heebo,Arial}
+  body{background:linear-gradient(135deg,#eef2ff,#f8fafc);}
+  .wrap{max-width:1100px;margin:auto;padding:20px}
+  .card{background:var(--card);border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 8px 24px rgba(2,6,23,.07);padding:16px;margin-bottom:14px}
+  h1{margin:.2em 0 0.6em;font-size:26px}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  @media(max-width:800px){.row{grid-template-columns:1fr}}
+  label{font-weight:600;margin-bottom:6px;display:block}
+  input[type=file]{width:100%}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;border:1px solid #cbd5e1;background:#fff;font-weight:700;cursor:pointer}
+  .btn.primary{background:var(--acc);color:#fff;border-color:var(--acc)}
+  .muted{color:var(--muted);font-size:13px}
+  table{width:100%;border-collapse:separate;border-spacing:0}
+  thead th{position:sticky;top:0;background:#f1f5f9;border-bottom:1px solid #e2e8f0}
+  th,td{padding:8px;border-bottom:1px solid #e2e8f0;font-size:14px;text-align:right}
+  .tools{display:flex;gap:8px;flex-wrap:wrap}
+  .badge{font-size:12px;border:1px solid #e2e8f0;border-radius:999px;padding:2px 8px;background:#f8fafc}
+  .err{color:#b91c1c;font-weight:700}
+  .ok{color:#166534;font-weight:700}
+  .log{font-family:ui-monospace,Consolas,monospace;font-size:12px;white-space:pre-wrap;background:#0b1220;color:#e2e8f0;border-radius:10px;padding:10px;max-height:160px;overflow:auto}
+</style>
 </head>
-<body class="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50 dark:from-slate-900 dark:to-slate-950 text-slate-900 dark:text-slate-100">
-  <div class="max-w-7xl mx-auto p-4 md:p-8">
-    <header class="flex items-center gap-4 mb-6">
-      <h1 class="text-2xl md:text-3xl font-extrabold">מיזוג דוחות לפי מספר עובד</h1>
-      <span class="badge">מעלה כמה קבצים, מאחדת לחודשים שונים</span>
-      <div class="ms-auto flex items-center gap-3">
-        <button id="themeToggle" class="btn">מצב כהה/בהיר</button>
-        <a id="downloadCsv" class="btn" href="#" download>CSV שורות</a>
-        <a id="downloadXlsx" class="btn" href="#" download>XLSX שורות</a>
-        <a id="downloadCsvAgg" class="btn" href="#" download>CSV פעולות חודשי</a>
-        <a id="downloadXlsxAgg" class="btn" href="#" download>XLSX פעולות חודשי</a>
-      </div>
-    </header>
-
-    <section class="card mb-6">
-      <h2 class="text-xl font-semibold mb-3">העלאת קבצים (אפשר כמה לכל סוג, מכל חודש)</h2>
-      <p class="text-sm text-slate-600 dark:text-slate-300 mb-3">
-        <b>נוכחות (כ״א):</b> עמודות מומלצות — עובד/employee_id, שם עובד, <b>חודש</b> (למשל אוק-25), <b>תאריך</b> (מספר יום בחודש) או תאריך מלא, יום, כניסה, יציאה, סה״כ.<br>
-        <b>שאר הדוחות:</b> אפשר להעלות מכל החודשים. המערכת תחבר הכל אוטומטית לפי עובד+תאריך ותפיק גם <b>סיכום חודשי לפעולות</b>.
-      </p>
-      <div class="grid md:grid-cols-2 gap-4">
-        <div>
-          <label class="block font-medium mb-1">נוכחות ושעות (attendance)</label>
-          <input type="file" id="f_att" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
-        </div>
-        <div>
-          <label class="block font-medium mb-1">פעילות – הועברו (activity)</label>
-          <input type="file" id="f_act" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
-        </div>
-        <div>
-          <label class="block font-medium mb-1">פעולות בפניות (actions)</label>
-          <input type="file" id="f_acn" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
-        </div>
-        <div>
-          <label class="block font-medium mb-1">וואטסאפ (whatsapp)</label>
-          <input type="file" id="f_wht" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
-        </div>
-        <div>
-          <label class="block font-medium mb-1">פניות שנפתחו (openings)</label>
-          <input type="file" id="f_opn" multiple accept=".csv,.xlsx,.xls" class="block w-full text-sm" />
-        </div>
-      </div>
-      <div class="mt-4 flex gap-2">
-        <button id="mergeBtn" class="btn primary">מיזוג ל⁠דוח אחד</button>
-        <button id="clearBtn" class="btn">ניקוי הכל</button>
-        <button id="demoBtn" class="btn">טען נתוני דוגמה</button>
-      </div>
-      <p id="errorBox" class="mt-3 text-sm err hidden"></p>
-    </section>
-
-    <section class="card mb-3">
-      <h3 class="text-lg font-semibold mb-3">מסננים</h3>
-      <div class="grid md:grid-cols-4 gap-3">
-        <div>
-          <label class="block text-sm mb-1">מספר עובד</label>
-          <input id="filterEmp" class="inp" placeholder="למשל: 1001" />
-        </div>
-        <div>
-          <label class="block text-sm mb-1">תאריך מ-</label>
-          <input id="filterFrom" type="date" class="inp" />
-        </div>
-        <div>
-          <label class="block text-sm mb-1">תאריך עד</label>
-          <input id="filterTo" type="date" class="inp" />
-        </div>
-        <div class="flex items-end">
-          <button id="applyFilter" class="btn w-full">החלת סינון</button>
-        </div>
-      </div>
-    </section>
-
-    <div class="tabs flex gap-2 mb-3">
-      <button class="btn" id="tabRows" aria-selected="true">שורות מאוחדות</button>
-      <button class="btn" id="tabAgg">סיכום חודשי – פעולות</button>
-    </div>
-
-    <section class="card" id="panelRows">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">דוח שורות מאוחד</h2>
-        <span id="stats" class="text-sm text-slate-600 dark:text-slate-300"></span>
-      </div>
-      <div class="table-wrap">
-        <table class="text-sm w-full">
-          <thead>
-            <tr>
-              <th class="p-2 text-right">date</th>
-              <th class="p-2 text-right">employee_id</th>
-              <th class="p-2 text-right">employee_name</th>
-              <th class="p-2 text-right">work_hours</th>
-              <th class="p-2 text-right">absences</th>
-              <th class="p-2 text-right">sick_hours</th>
-              <th class="p-2 text-right">vacation_hours</th>
-              <th class="p-2 text-right">moved_to_closure</th>
-              <th class="p-2 text-right">moved_to_pending</th>
-              <th class="p-2 text-right">emails_sent</th>
-              <th class="p-2 text-right">calls_logged</th>
-              <th class="p-2 text-right">tasks_logged</th>
-              <th class="p-2 text-right">whatsapp_received</th>
-              <th class="p-2 text-right">whatsapp_replied</th>
-              <th class="p-2 text-right">tickets_opened</th>
-              <th class="p-2 text-right">overtime_100</th>
-              <th class="p-2 text-right">overtime_125</th>
-              <th class="p-2 text-right">overtime_150</th>
-            </tr>
-          </thead>
-          <tbody id="reportBody"></tbody>
-        </table>
-      </div>
-    </section>
-
-    <section class="card hidden" id="panelAgg">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xl font-semibold">סיכום חודשי – פעולות (Emails/Calls/Tasks)</h2>
-        <span id="statsAgg" class="text-sm text-slate-600 dark:text-slate-300"></span>
-      </div>
-      <div class="table-wrap">
-        <table class="text-sm w-full">
-          <thead>
-            <tr>
-              <th class="p-2 text-right">month</th>
-              <th class="p-2 text-right">employee_id</th>
-              <th class="p-2 text-right">employee_name</th>
-              <th class="p-2 text-right">emails_sent</th>
-              <th class="p-2 text-right">calls_logged</th>
-              <th class="p-2 text-right">tasks_logged</th>
-            </tr>
-          </thead>
-          <tbody id="aggBody"></tbody>
-        </table>
-      </div>
-    </section>
+<body>
+<div class="wrap">
+  <h1>מיזוג דוחות לפי מספר עובד — CSV בלבד</h1>
+  <div class="card">
+    <div class="muted">מותר להעלות כמה קבצים לכל סוג, מכמה חודשים שונים. הדף מאחד לפי <b>עובד/employee_id + תאריך</b>.<br>
+    אם אין תאריך מלא — הוא ירכיב מתא <b>חודש</b> (למשל <code>אוק-25</code>) + תא <b>תאריך</b> (היום בחודש).</div>
   </div>
 
-  <script>
-    // === Theme ===
-    function setTheme(dark){ document.documentElement.classList.toggle('dark', !!dark); }
-    setTheme(window.matchMedia('(prefers-color-scheme: dark)').matches);
-    document.getElementById('themeToggle').addEventListener('click', ()=> setTheme(!document.documentElement.classList.contains('dark')));
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>נוכחות ושעות (attendance) — CSV</label>
+        <input type="file" id="f_att" multiple accept=".csv">
+        <div class="muted">עמודות שמוכרות: עובד/employee_id, שם עובד, חודש, תאריך (יום בחודש) או date, יום, כניסה, יציאה, סה"כ</div>
+      </div>
+      <div>
+        <label>פעילות — הועברו (activity) — CSV</label>
+        <input type="file" id="f_act" multiple accept=".csv">
+        <div class="muted">עמודות: הועברו לסגירה / הועברו להמתנה (עם עובד + תאריך)</div>
+      </div>
+      <div>
+        <label>פעולות (actions) — CSV</label>
+        <input type="file" id="f_acn" multiple accept=".csv">
+        <div class="muted">עמודות: מיילים / שיחות / משימות (ואופציונלי ש-100%/125%/150%)</div>
+      </div>
+      <div>
+        <label>וואטסאפ (whatsapp) — CSV</label>
+        <input type="file" id="f_wht" multiple accept=".csv">
+        <div class="muted">עמודות: וואטסאפ התקבל / וואטסאפ נענה (עם עובד + תאריך)</div>
+      </div>
+      <div>
+        <label>פתיחת פניות (openings) — CSV</label>
+        <input type="file" id="f_opn" multiple accept=".csv">
+        <div class="muted">עמודות: פניות שנפתחו (עם עובד + תאריך)</div>
+      </div>
+    </div>
+    <div style="margin-top:12px" class="tools">
+      <button id="mergeBtn" class="btn primary">מיזוג לדוח אחד</button>
+      <button id="clearBtn" class="btn">ניקוי</button>
+      <button id="demoBtn" class="btn">טעינת דוגמה</button>
+      <button id="downloadCsv" class="btn" disabled>הורדת דוח (CSV)</button>
+      <span id="status" class="badge">מוכן</span>
+    </div>
+    <div id="msg" class="muted" style="margin-top:8px"></div>
+  </div>
 
-    // === UI helpers ===
-    const errorBox = document.getElementById('errorBox');
-    function showError(msg){
-      errorBox.textContent = msg;
-      errorBox.classList.remove('hidden');
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>מסננים</label>
+        <div class="row" style="grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <input id="filterEmp" placeholder="מס' עובד" />
+          <input id="filterFrom" type="date" />
+          <input id="filterTo" type="date" />
+        </div>
+        <div class="tools" style="margin-top:8px">
+          <button id="applyFilter" class="btn">החלת סינון</button>
+        </div>
+      </div>
+      <div>
+        <label>יומן מערכת</label>
+        <div id="log" class="log"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="tools" style="justify-content:space-between">
+      <strong>דוח מאוחד</strong>
+      <span id="stats" class="muted">—</span>
+    </div>
+    <div style="max-height:55vh;overflow:auto;margin-top:8px">
+      <table>
+        <thead>
+          <tr>
+            <th>date</th>
+            <th>employee_id</th>
+            <th>employee_name</th>
+            <th>work_hours</th>
+            <th>absences</th>
+            <th>sick_hours</th>
+            <th>vacation_hours</th>
+            <th>moved_to_closure</th>
+            <th>moved_to_pending</th>
+            <th>emails_sent</th>
+            <th>calls_logged</th>
+            <th>tasks_logged</th>
+            <th>whatsapp_received</th>
+            <th>whatsapp_replied</th>
+            <th>tickets_opened</th>
+            <th>overtime_100</th>
+            <th>overtime_125</th>
+            <th>overtime_150</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ========= יומן ========= */
+const logEl = document.getElementById('log');
+function log(msg){ logEl.textContent += (msg + "\n"); logEl.scrollTop = logEl.scrollHeight; }
+function setStatus(t){ document.getElementById('status').textContent = t; }
+
+/* ========= CSV Parser קטן (תומך מרכאות) ========= */
+function parseCSV(text){
+  // מסיר BOM אם קיים
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = [];
+  let cur = '', row = [], i = 0, q = false;
+  while (i < text.length){
+    const c = text[i];
+    if (q){
+      if (c === '"'){
+        if (text[i+1] === '"'){ cur += '"'; i++; }
+        else { q = false; }
+      } else { cur += c; }
+    } else {
+      if (c === '"'){ q = true; }
+      else if (c === ','){ row.push(cur); cur=''; }
+      else if (c === '\n'){ row.push(cur); rows.push(row); row=[]; cur=''; }
+      else if (c === '\r'){ /* דלג */ }
+      else { cur += c; }
     }
-    function clearError(){ errorBox.textContent=''; errorBox.classList.add('hidden'); }
+    i++;
+  }
+  row.push(cur); rows.push(row);
+  // ממיר לשורת אובייקטים
+  const headers = rows.shift().map(h=>String(h||'').trim());
+  const out = [];
+  for (const r of rows){
+    if (r.every(x => String(x||'').trim()==='')) continue;
+    const o = {};
+    headers.forEach((h,idx)=>{ o[h] = r[idx] ?? ''; });
+    out.push(o);
+  }
+  return out;
+}
 
-    // === Tabs ===
-    const tabRows = document.getElementById('tabRows');
-    const tabAgg  = document.getElementById('tabAgg');
-    const panelRows = document.getElementById('panelRows');
-    const panelAgg  = document.getElementById('panelAgg');
-    tabRows.addEventListener('click', ()=>{
-      tabRows.setAttribute('aria-selected','true'); tabAgg.removeAttribute('aria-selected');
-      panelRows.classList.remove('hidden'); panelAgg.classList.add('hidden');
-    });
-    tabAgg.addEventListener('click', ()=>{
-      tabAgg.setAttribute('aria-selected','true'); tabRows.removeAttribute('aria-selected');
-      panelAgg.classList.remove('hidden'); panelRows.classList.add('hidden');
-    });
+/* ========= עזרי נתונים ========= */
+const DEFAULT_ROW = {
+  work_hours:0, absences:0, sick_hours:0, vacation_hours:0,
+  moved_to_closure:0, moved_to_pending:0,
+  emails_sent:0, calls_logged:0, tasks_logged:0,
+  whatsapp_received:0, whatsapp_replied:0, tickets_opened:0,
+  overtime_100:0, overtime_125:0, overtime_150:0,
+  work_location:''
+};
 
-    // === Consts ===
-    const DEFAULT_ROW = {
-      work_hours:0, absences:0, sick_hours:0, vacation_hours:0,
-      moved_to_closure:0, moved_to_pending:0,
-      emails_sent:0, calls_logged:0, tasks_logged:0,
-      whatsapp_received:0, whatsapp_replied:0, tickets_opened:0,
-      overtime_100:0, overtime_125:0, overtime_150:0,
-      work_location:''
-    };
+const HEB_MONTHS = {
+  'ינו':1,'ינואר':1,'פבר':2,'פברואר':2,'מרץ':3,'מרס':3,'אפר':4,'אפריל':4,'מאי':5,
+  'יונ':6,'יוני':6,'יול':7,'יולי':7,'אוג':8,'אוגוסט':8,'ספט':9,'ספטמבר':9,
+  'אוק':10,'אוקטובר':10,'נוב':11,'נובמבר':11,'דצמ':12,'דצמבר':12
+};
+function parseHebMonthStr(s){
+  if(!s) return null;
+  s = String(s).trim();
+  const parts = s.split(/[-\s]/).filter(Boolean);
+  const mon = HEB_MONTHS[parts[0]];
+  if(!mon) return null;
+  let year = null;
+  if(parts[1]){
+    if(/^\d{2}$/.test(parts[1])) year = 2000 + parseInt(parts[1],10);
+    else if(/^\d{4}$/.test(parts[1])) year = parseInt(parts[1],10);
+  }
+  return {month: mon, year};
+}
+function composeDateFromMonthDay(monthStr, day){
+  const md = parseHebMonthStr(monthStr);
+  const d = parseInt(day,10);
+  if(md && md.year && md.month && d>0 && d<=31){
+    const dt = new Date(md.year, md.month-1, d);
+    return dt.toISOString().slice(0,10);
+  }
+  return null;
+}
+function parseDateSmart(row){
+  const norm = {};
+  for (const k in row){ norm[String(k).trim().toLowerCase()] = row[k]; }
+  // ישירות
+  const direct = norm.date || norm['תאריך מלא'] || norm['date '];
+  if(direct){
+    const d = new Date(direct);
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
+  }
+  // חודש + תאריך (יום בחודש)
+  const day = norm['תאריך'] || norm['יום בחודש'] || norm.day;
+  const mon = norm['חודש']  || norm.month;
+  const comp = composeDateFromMonthDay(mon, day);
+  if(comp) return comp;
+  // DD/MM/YYYY
+  const m = String(norm['תאריך']||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m){
+    const d = new Date(+m[3], +m[2]-1, +m[1]);
+    if(!isNaN(d)) return d.toISOString().slice(0,10);
+  }
+  return null;
+}
+function toNumber(v){
+  const n = Number(String(v ?? '').replace(/[,\s]/g,''));
+  return isFinite(n) ? n : 0;
+}
 
-    // Hebrew months
-    const HEB_MONTHS = {
-      'ינו':1,'ינואר':1,'פבר':2,'פברואר':2,'מרץ':3,'מרס':3,'אפר':4,'אפריל':4,'מאי':5,
-      'יונ':6,'יוני':6,'יול':7,'יולי':7,'אוג':8,'אוגוסט':8,'ספט':9,'ספטמבר':9,
-      'אוק':10,'אוקטובר':10,'נוב':11,'נובמבר':11,'דצמ':12,'דצמבר':12
-    };
-    function parseHebMonthStr(s){
-      if(!s) return null;
-      s = String(s).trim();
-      const parts = s.split(/[-\s]/).filter(Boolean); // "אוק-25" / "אוקטובר 2025"
-      if(parts.length>=1){
-        const mon = HEB_MONTHS[parts[0]];
-        if(mon){
-          let yy = null;
-          if(parts.length>=2){
-            const y = parts[1];
-            if(/^\d{2}$/.test(y)) yy = 2000 + parseInt(y,10);
-            else if(/^\d{4}$/.test(y)) yy = parseInt(y,10);
+/* ========= קריאת קבצים ========= */
+async function readCsvFiles(fileList){
+  const all = [];
+  for (const f of fileList){
+    const txt = await f.text();
+    const rows = parseCSV(txt);
+    all.push(...rows);
+    log(`נקרא: ${f.name} (${rows.length} שורות)`);
+  }
+  return all;
+}
+
+/* ========= מיזוג ========= */
+let LAST_ROWS = [];
+
+async function mergeAll(){
+  setStatus('מריץ…');
+  log('--- התחלת מיזוג ---');
+  document.getElementById('msg').innerHTML = '';
+  const store = new Map(); // key: empId__date
+
+  function up(row0, mapper){
+    // נרמל מפתחות
+    const r = {};
+    for (const k in row0){ r[String(k).trim().toLowerCase()] = row0[k]; }
+
+    const empId = (r.employee_id ?? r['מספר עובד'] ?? r['עובד'] ?? r.id ?? '').toString().trim();
+    const empName = (r.employee_name ?? r['שם עובד'] ?? r['שם'] ?? '').toString().trim();
+    if(!empId){ return; }
+    const ymd = parseDateSmart(row0);
+    if(!ymd){ return; }
+
+    const key = empId + '__' + ymd;
+    if(!store.has(key)) store.set(key, { date: ymd, employee_id: empId, employee_name: empName, ...structuredClone(DEFAULT_ROW) });
+    const row = store.get(key);
+    mapper(r, row);
+    if(empName) row.employee_name = empName;
+  }
+
+  // קריאה מכל קטגוריה (CSV בלבד)
+  const files = {
+    attendance: document.getElementById('f_att').files,
+    activity:   document.getElementById('f_act').files,
+    actions:    document.getElementById('f_acn').files,
+    whatsapp:   document.getElementById('f_wht').files,
+    openings:   document.getElementById('f_opn').files
+  };
+
+  // Attendance
+  if(files.attendance.length){
+    const rows = await readCsvFiles(files.attendance);
+    rows.forEach(obj=>{
+      up(obj, (r, row)=>{
+        // מתעלמים: חברה, שם חברה, פעולה, מחלקה, רגילות, אחרות, י"ע, י"נ
+        const total = r['סה"כ'] ?? r['סה\"כ'] ?? r["סה'כ"] ?? r['סהכ'] ?? r['total'];
+        if(total !== undefined && total !== "") row.work_hours += toNumber(total);
+        else {
+          const tin  = (r['כניסה']||'').toString().trim();
+          const tout = (r['יציאה']||'').toString().trim();
+          if(tin && tout && /^\d{1,2}:\d{2}$/.test(tin) && /^\d{1,2}:\d{2}$/.test(tout)){
+            const [hi,mi] = tin.split(':').map(n=>parseInt(n,10));
+            const [ho,mo] = tout.split(':').map(n=>parseInt(n,10));
+            const mins = (ho*60+mo) - (hi*60+mi);
+            if(isFinite(mins) && mins>0) row.work_hours += mins/60;
           }
-          return {month: mon, year: yy};
         }
-      }
-      return null;
-    }
-    function composeDateFromMonthDay(monthStr, day){
-      const md = parseHebMonthStr(monthStr);
-      const d = parseInt(day,10);
-      if(md && md.year && md.month && d>0 && d<=31){
-        return new Date(md.year, md.month-1, d);
-      }
-      return null;
-    }
-
-    // Helpers
-    function toNumber(v){
-      const n = Number(String(v ?? '').replace(/[,\s]/g,''));
-      return isFinite(n) ? n : 0;
-    }
-    function normalizeRow(row){
-      const norm = {};
-      for(const k in row){
-        if(!Object.prototype.hasOwnProperty.call(row,k)) continue;
-        norm[String(k).trim().toLowerCase()] = row[k];
-      }
-      return norm;
-    }
-    function parseDateLoose(v){
-      if(!v) return null;
-      const d = new Date(v);
-      return isNaN(d) ? null : d;
-    }
-    function parseDateSmart(row0){
-      const r = normalizeRow(row0);
-      const direct = parseDateLoose(r.date || r['תאריך מלא'] || r['date ']);
-      if(direct) return direct;
-      const day = r['תאריך'] || r['יום בחודש'] || r['day'];
-      const mon = r['חודש']  || r['month'];
-      const composed = composeDateFromMonthDay(mon, day);
-      if(composed) return composed;
-      const m = String(r['תאריך']||'').match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-      if(m) return new Date(+m[3], +m[2]-1, +m[1]);
-      return null;
-    }
-    function key(empId, date){ return `${empId}__${date}`; }
-
-    async function readFiles(fileList){
-      const out = [];
-      for(const file of fileList){
-        const data = await file.arrayBuffer();
-        const wb = XLSX.read(data, {type:'array'});
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(ws, {defval:""});
-        out.push(...json);
-      }
-      return out;
-    }
-
-    // STATE
-    let LAST_ROWS = [];
-    let LAST_AGG  = [];
-
-    // Merge
-    async function mergeAll(){
-      clearError();
-      try{
-        const files = {
-          attendance: document.getElementById('f_att').files,
-          activity:   document.getElementById('f_act').files,
-          actions:    document.getElementById('f_acn').files,
-          whatsapp:   document.getElementById('f_wht').files,
-          openings:   document.getElementById('f_opn').files,
-        };
-        const store = new Map(); // empId__date -> merged row
-
-        async function process(category, mapFn){
-          if(!files[category] || files[category].length===0) return;
-          const rows = await readFiles(files[category]);
-          for(const r0 of rows){
-            const r = normalizeRow(r0);
-            const empId   = (r.employee_id ?? r['מספר עובד'] ?? r['עובד'] ?? r['id'] ?? '').toString().trim();
-            const empName = (r.employee_name ?? r['שם עובד']   ?? r['שם']   ?? '').toString().trim();
-            const dt = parseDateSmart(r0);
-            if(!empId || !dt) continue;
-            const ymd = dt.toISOString().slice(0,10);
-
-            const k = key(empId, ymd);
-            if(!store.has(k)) store.set(k, { date: ymd, employee_id: empId, employee_name: empName, ...structuredClone(DEFAULT_ROW) });
-            const row = store.get(k);
-            mapFn(r, row);
-            if(empName) row.employee_name = empName;
-          }
-        }
-
-        // ATTENDANCE: מתעלמים מחברה/שם חברה/פעולה/מחלקה/רגילות/אחרות/י"ע/י"נ
-        await process('attendance', (r, row)=>{
-          const total = r['סה"כ'] ?? r['סה\"כ'] ?? r["סה'כ"] ?? r['סהכ'] ?? r['total'];
-          if(total !== undefined && total !== ""){
-            row.work_hours += toNumber(total);
-          } else {
-            const tin  = (r['כניסה']||'').toString();
-            const tout = (r['יציאה']||'').toString();
-            if(tin && tout){
-              const [hi,mi] = tin.split(':').map(n=>parseInt(n||'0',10));
-              const [ho,mo] = tout.split(':').map(n=>parseInt(n||'0',10));
-              if(!isNaN(hi) && !isNaN(ho)){
-                const mins = (ho*60+mo) - (hi*60+mi);
-                if(isFinite(mins) && mins>0) row.work_hours += mins/60;
-              }
-            }
-          }
-          const dayType = (r['יום']||'').toString();
-          if(/מהבית/.test(dayType)) row.work_location = 'home';
-          else if(/משרד/.test(dayType)) row.work_location = 'office';
-        });
-
-        // ACTIVITY
-        await process('activity', (r, row)=>{
-          row.moved_to_closure += toNumber(r.moved_to_closure ?? r['הועברו לסגירה']);
-          row.moved_to_pending += toNumber(r.moved_to_pending ?? r['הועברו להמתנה']);
-        });
-
-        // ACTIONS (+ אופציה לשעות נוספות אם באותו קובץ)
-        await process('actions', (r, row)=>{
-          row.emails_sent += toNumber(r.emails_sent ?? r['מיילים'] ?? r['שליחת מייל']);
-          row.calls_logged += toNumber(r.calls_logged ?? r['שיחות']  ?? r['תיעוד/רישום שיחה']);
-          row.tasks_logged += toNumber(r.tasks_logged ?? r['משימות']);
-          row.overtime_100 = (row.overtime_100||0) + toNumber(r['ש-100%']);
-          row.overtime_125 = (row.overtime_125||0) + toNumber(r['125%']);
-          row.overtime_150 = (row.overtime_150||0) + toNumber(r['150%']);
-        });
-
-        // WHATSAPP
-        await process('whatsapp', (r, row)=>{
-          row.whatsapp_received += toNumber(r.whatsapp_received ?? r['וואטסאפ התקבל'] ?? r['whatsapp_received']);
-          row.whatsapp_replied  += toNumber(r.whatsapp_replied  ?? r['וואטסאפ נענה']   ?? r['whatsapp_replied']);
-        });
-
-        // OPENINGS
-        await process('openings', (r, row)=>{
-          row.tickets_opened += toNumber(r.tickets_opened ?? r['פניות שנפתחו'] ?? r['tickets_opened']);
-        });
-
-        // To array
-        const arr = [...store.values()].sort((a,b)=>{
-          if(a.date!==b.date) return a.date.localeCompare(b.date);
-          return (a.employee_id||'').localeCompare(b.employee_id||'');
-        });
-        LAST_ROWS = arr;
-        renderRows(arr);
-        enableDownloadsRows(arr);
-
-        // Monthly aggregation for ACTIONS
-        const agg = aggregateActionsMonthly(arr);
-        LAST_AGG = agg;
-        renderAgg(agg);
-        enableDownloadsAgg(agg);
-
-        if(arr.length===0){
-          showError('לא נמצאו שורות לאחר קריאת הקבצים. ודאי שהעמודות: עובד/employee_id ו-תאריך (או חודש+תאריך) קיימות.');
-        }
-      }catch(e){
-        console.error(e);
-        showError('שגיאה בריצה: ' + (e?.message || e));
-      }
-    }
-
-    function aggregateActionsMonthly(rows){
-      const map = new Map(); // month__emp -> obj
-      for(const r of rows){
-        // month from date
-        const m = (r.date||'').slice(0,7); // YYYY-MM
-        const k = `${m}__${r.employee_id}`;
-        if(!map.has(k)) map.set(k, {
-          month:m, employee_id:r.employee_id, employee_name:r.employee_name || '',
-          emails_sent:0, calls_logged:0, tasks_logged:0
-        });
-        const o = map.get(k);
-        o.emails_sent += toNumber(r.emails_sent);
-        o.calls_logged += toNumber(r.calls_logged);
-        o.tasks_logged += toNumber(r.tasks_logged);
-      }
-      return [...map.values()].sort((a,b)=>{
-        if(a.month!==b.month) return a.month.localeCompare(b.month);
-        return (a.employee_id||'').localeCompare(b.employee_id||'');
+        const dayType = (r['יום']||'').toString();
+        if(/מהבית/.test(dayType)) row.work_location = 'home';
+        else if(/משרד/.test(dayType)) row.work_location = 'office';
       });
-    }
-
-    // Render rows
-    function renderRows(rows){
-      const tb = document.getElementById('reportBody');
-      tb.innerHTML = '';
-      const fEmp  = document.getElementById('filterEmp')?.value.trim() || '';
-      const fFrom = document.getElementById('filterFrom')?.value || '';
-      const fTo   = document.getElementById('filterTo')?.value || '';
-      let shown = 0;
-      for(const r of rows){
-        if(fEmp && r.employee_id!==fEmp) continue;
-        if(fFrom && r.date < fFrom) continue;
-        if(fTo   && r.date > fTo)   continue;
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="p-2">${r.date||''}</td>
-          <td class="p-2">${r.employee_id||''}</td>
-          <td class="p-2">${r.employee_name||''}</td>
-          <td class="p-2 text-right">${r.work_hours??0}</td>
-          <td class="p-2 text-right">${r.absences??0}</td>
-          <td class="p-2 text-right">${r.sick_hours??0}</td>
-          <td class="p-2 text-right">${r.vacation_hours??0}</td>
-          <td class="p-2 text-right">${r.moved_to_closure??0}</td>
-          <td class="p-2 text-right">${r.moved_to_pending??0}</td>
-          <td class="p-2 text-right">${r.emails_sent??0}</td>
-          <td class="p-2 text-right">${r.calls_logged??0}</td>
-          <td class="p-2 text-right">${r.tasks_logged??0}</td>
-          <td class="p-2 text-right">${r.whatsapp_received??0}</td>
-          <td class="p-2 text-right">${r.whatsapp_replied??0}</td>
-          <td class="p-2 text-right">${r.tickets_opened??0}</td>
-          <td class="p-2 text-right">${r.overtime_100??0}</td>
-          <td class="p-2 text-right">${r.overtime_125??0}</td>
-          <td class="p-2 text-right">${r.overtime_150??0}</td>`;
-        tb.appendChild(tr);
-        shown++;
-      }
-      document.getElementById('stats').textContent = `שורות מוצגות: ${shown}`;
-    }
-
-    // Render monthly actions summary
-    function renderAgg(rows){
-      const tb = document.getElementById('aggBody');
-      tb.innerHTML = '';
-      let shown = 0;
-      for(const r of rows){
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td class="p-2">${r.month||''}</td>
-          <td class="p-2">${r.employee_id||''}</td>
-          <td class="p-2">${r.employee_name||''}</td>
-          <td class="p-2 text-right">${r.emails_sent??0}</td>
-          <td class="p-2 text-right">${r.calls_logged??0}</td>
-          <td class="p-2 text-right">${r.tasks_logged??0}</td>`;
-        tb.appendChild(tr);
-        shown++;
-      }
-      document.getElementById('statsAgg').textContent = `שורות: ${shown}`;
-    }
-
-    // Export (rows)
-    function enableDownloadsRows(rows){
-      const headers = [
-        'date','employee_id','employee_name','work_hours','absences','sick_hours','vacation_hours',
-        'moved_to_closure','moved_to_pending','emails_sent','calls_logged','tasks_logged',
-        'whatsapp_received','whatsapp_replied','tickets_opened','overtime_100','overtime_125','overtime_150'
-      ];
-      const ws = XLSX.utils.json_to_sheet(rows, {header: headers});
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'rows');
-      const csv = XLSX.utils.sheet_to_csv(ws);
-      const aCsv = document.getElementById('downloadCsv');
-      aCsv.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8;'}));
-      aCsv.download = `merged_rows_${new Date().toISOString().slice(0,10)}.csv`;
-      const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-      const aX = document.getElementById('downloadXlsx');
-      aX.href = URL.createObjectURL(new Blob([wbout], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-      aX.download = `merged_rows_${new Date().toISOString().slice(0,10)}.xlsx`;
-    }
-
-    // Export (monthly actions)
-    function enableDownloadsAgg(rows){
-      const headers = ['month','employee_id','employee_name','emails_sent','calls_logged','tasks_logged'];
-      const ws = XLSX.utils.json_to_sheet(rows, {header: headers});
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'actions_monthly');
-      const csv = XLSX.utils.sheet_to_csv(ws);
-      const aCsv = document.getElementById('downloadCsvAgg');
-      aCsv.href = URL.createObjectURL(new Blob([csv], {type:'text/csv;charset=utf-8;'}));
-      aCsv.download = `actions_monthly_${new Date().toISOString().slice(0,10)}.csv`;
-      const wbout = XLSX.write(wb, {bookType:'xlsx', type:'array'});
-      const aX = document.getElementById('downloadXlsxAgg');
-      aX.href = URL.createObjectURL(new Blob([wbout], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}));
-      aX.download = `actions_monthly_${new Date().toISOString().slice(0,10)}.xlsx`;
-    }
-
-    // Events
-    document.getElementById('mergeBtn').addEventListener('click', mergeAll);
-    document.getElementById('clearBtn').addEventListener('click', ()=>{
-      ['f_att','f_act','f_acn','f_wht','f_opn'].forEach(id=> document.getElementById(id).value='');
-      document.getElementById('reportBody').innerHTML = '';
-      document.getElementById('aggBody').innerHTML = '';
-      document.getElementById('stats').textContent = '';
-      document.getElementById('statsAgg').textContent = '';
-      LAST_ROWS = []; LAST_AGG = [];
-      clearError();
     });
+  }
 
-    // Demo button (loads small in-memory datasets so שאת רואה שזה עובד)
-    document.getElementById('demoBtn').addEventListener('click', async ()=>{
-      clearError();
-      // נבנה וורקפלואו כמו mergeAll אבל עם שורות דמו
-      const rows = [];
-      // Attendance: ספט+אוק
-      rows.push({employee_id: '1001', 'שם עובד': 'רות', 'חודש':'ספט-25', 'תאריך': '30', 'כניסה':'08:15','יציאה':'16:45', 'יום':'עבודה מהבית'});
-      rows.push({employee_id: '1001', 'שם עובד': 'רות', 'חודש':'אוק-25',  'תאריך': '1',  'סה\"כ':'8.0', 'יום':'עבודה במשרד'});
-      // Actions: across months
-      rows.push({employee_id:'1001','שם עובד':'רות','date':'2025-09-30','מיילים':3,'שיחות':2,'משימות':1});
-      rows.push({employee_id:'1001','שם עובד':'רות','date':'2025-10-01','מיילים':5,'שיחות':4,'משימות':2});
-
-      // Simulate pipeline
-      const store = new Map();
-      function up(r0, mapFn){
-        const r = normalizeRow(r0);
-        const empId = (r.employee_id ?? r['מספר עובד'] ?? r['עובד'] ?? r['id'] ?? '').toString().trim();
-        const empName = (r.employee_name ?? r['שם עובד'] ?? r['שם'] ?? '').toString().trim();
-        const dt = parseDateSmart(r0);
-        if(!empId || !dt) return;
-        const ymd = dt.toISOString().slice(0,10);
-        const k = key(empId, ymd);
-        if(!store.has(k)) store.set(k, { date: ymd, employee_id: empId, employee_name: empName, ...structuredClone(DEFAULT_ROW) });
-        const row = store.get(k);
-        mapFn(r, row);
-        if(empName) row.employee_name = empName;
-      }
-      // Attendance part
-      up(rows[0], (r, row)=>{
-        const tin='08:15', tout='16:45';
-        const [hi,mi] = tin.split(':').map(n=>parseInt(n,10)), [ho,mo] = tout.split(':').map(n=>parseInt(n,10));
-        row.work_hours += ((ho*60+mo)-(hi*60+mi))/60;
-        row.work_location='home';
+  // Activity
+  if(files.activity.length){
+    const rows = await readCsvFiles(files.activity);
+    rows.forEach(obj=>{
+      up(obj, (r, row)=>{
+        row.moved_to_closure += toNumber(r['moved_to_closure'] ?? r['הועברו לסגירה']);
+        row.moved_to_pending += toNumber(r['moved_to_pending'] ?? r['הועברו להמתנה']);
       });
-      up(rows[1], (r, row)=>{ row.work_hours += 8; row.work_location='office'; });
-      // Actions part
-      up(rows[2], (r,row)=>{ row.emails_sent+=3; row.calls_logged+=2; row.tasks_logged+=1; });
-      up(rows[3], (r,row)=>{ row.emails_sent+=5; row.calls_logged+=4; row.tasks_logged+=2; });
-
-      const arr = [...store.values()].sort((a,b)=> a.date.localeCompare(b.date) || a.employee_id.localeCompare(b.employee_id));
-      LAST_ROWS = arr; renderRows(arr); enableDownloadsRows(arr);
-      const agg = aggregateActionsMonthly(arr);
-      LAST_AGG = agg; renderAgg(agg); enableDownloadsAgg(agg);
     });
+  }
 
-    document.getElementById('applyFilter').addEventListener('click', ()=>{
-      renderRows(LAST_ROWS || []);
+  // Actions
+  if(files.actions.length){
+    const rows = await readCsvFiles(files.actions);
+    rows.forEach(obj=>{
+      up(obj, (r, row)=>{
+        row.emails_sent += toNumber(r['emails_sent'] ?? r['מיילים'] ?? r['שליחת מייל']);
+        row.calls_logged += toNumber(r['calls_logged'] ?? r['שיחות']  ?? r['תיעוד/רישום שיחה']);
+        row.tasks_logged += toNumber(r['tasks_logged'] ?? r['משימות']);
+        row.overtime_100 = (row.overtime_100||0) + toNumber(r['ש-100%']);
+        row.overtime_125 = (row.overtime_125||0) + toNumber(r['125%']);
+        row.overtime_150 = (row.overtime_150||0) + toNumber(r['150%']);
+      });
     });
-  </script>
+  }
+
+  // WhatsApp
+  if(files.whatsapp.length){
+    const rows = await readCsvFiles(files.whatsapp);
+    rows.forEach(obj=>{
+      up(obj, (r, row)=>{
+        row.whatsapp_received += toNumber(r['whatsapp_received'] ?? r['וואטסאפ התקבל']);
+        row.whatsapp_replied  += toNumber(r['whatsapp_replied']  ?? r['וואטסאפ נענה']);
+      });
+    });
+  }
+
+  // Openings
+  if(files.openings.length){
+    const rows = await readCsvFiles(files.openings);
+    rows.forEach(obj=>{
+      up(obj, (r, row)=>{
+        row.tickets_opened += toNumber(r['tickets_opened'] ?? r['פניות שנפתחו']);
+      });
+    });
+  }
+
+  const arr = [...store.values()].sort((a,b)=>{
+    if(a.date!==b.date) return a.date.localeCompare(b.date);
+    return (a.employee_id||'').localeCompare(b.employee_id||'');
+  });
+
+  LAST_ROWS = arr;
+  render(arr);
+  setStatus('סיום');
+  log(`סיום — ${arr.length} שורות מאוחדות`);
+  if(!arr.length){
+    document.getElementById('msg').innerHTML = '<span class="err">לא נמצאו שורות — ודאי שיש עמודות "עובד/employee_id" ו-"תאריך" (או "חודש"+"תאריך").</span>';
+  }
+}
+
+/* ========= טבלה, סינון, יצוא ========= */
+function render(rows){
+  const tb = document.getElementById('tbody');
+  tb.innerHTML = '';
+  const fEmp  = document.getElementById('filterEmp').value.trim();
+  const fFrom = document.getElementById('filterFrom').value;
+  const fTo   = document.getElementById('filterTo').value;
+  let shown = 0;
+  for (const r of rows){
+    if(fEmp && r.employee_id !== fEmp) continue;
+    if(fFrom && r.date < fFrom) continue;
+    if(fTo && r.date > fTo) continue;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${r.date||''}</td>
+      <td>${r.employee_id||''}</td>
+      <td>${r.employee_name||''}</td>
+      <td style="text-align:end">${r.work_hours??0}</td>
+      <td style="text-align:end">${r.absences??0}</td>
+      <td style="text-align:end">${r.sick_hours??0}</td>
+      <td style="text-align:end">${r.vacation_hours??0}</td>
+      <td style="text-align:end">${r.moved_to_closure??0}</td>
+      <td style="text-align:end">${r.moved_to_pending??0}</td>
+      <td style="text-align:end">${r.emails_sent??0}</td>
+      <td style="text-align:end">${r.calls_logged??0}</td>
+      <td style="text-align:end">${r.tasks_logged??0}</td>
+      <td style="text-align:end">${r.whatsapp_received??0}</td>
+      <td style="text-align:end">${r.whatsapp_replied??0}</td>
+      <td style="text-align:end">${r.tickets_opened??0}</td>
+      <td style="text-align:end">${r.overtime_100??0}</td>
+      <td style="text-align:end">${r.overtime_125??0}</td>
+      <td style="text-align:end">${r.overtime_150??0}</td>`;
+    tb.appendChild(tr);
+    shown++;
+  }
+  document.getElementById('stats').textContent = 'שורות מוצגות: ' + shown;
+  document.getElementById('downloadCsv').disabled = rows.length===0;
+}
+
+function toCSV(rows){
+  const headers = ['date','employee_id','employee_name','work_hours','absences','sick_hours','vacation_hours',
+    'moved_to_closure','moved_to_pending','emails_sent','calls_logged','tasks_logged',
+    'whatsapp_received','whatsapp_replied','tickets_opened','overtime_100','overtime_125','overtime_150'];
+  const lines = [];
+  lines.push(headers.join(','));
+  for (const r of rows){
+    const vals = headers.map(h=>{
+      let v = r[h] ?? '';
+      v = (typeof v === 'string') ? v.replace(/"/g,'""') : v;
+      return `"${v}"`;
+    });
+    lines.push(vals.join(','));
+  }
+  return lines.join('\n');
+}
+
+document.getElementById('downloadCsv').addEventListener('click', ()=>{
+  const csv = toCSV(LAST_ROWS);
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'merged_report.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+document.getElementById('applyFilter').addEventListener('click', ()=> render(LAST_ROWS));
+
+/* ========= כפתורים ========= */
+document.getElementById('mergeBtn').addEventListener('click', mergeAll);
+document.getElementById('clearBtn').addEventListener('click', ()=>{
+  ['f_att','f_act','f_acn','f_wht','f_opn'].forEach(id=> document.getElementById(id).value='');
+  LAST_ROWS = [];
+  document.getElementById('tbody').innerHTML = '';
+  document.getElementById('stats').textContent = '—';
+  document.getElementById('downloadCsv').disabled = true;
+  document.getElementById('msg').innerHTML = '';
+  log('נוקה.');
+});
+
+document.getElementById('demoBtn').addEventListener('click', ()=>{
+  // יוצר דוגמה משולבת חודש ספט + אוק
+  const demoFiles = {
+    attendance: [
+      {employee_id:'1001','שם עובד':'רות','חודש':'ספט-25','תאריך':'30','כניסה':'08:15','יציאה':'16:45','יום':'עבודה מהבית'},
+      {employee_id:'1001','שם עובד':'רות','חודש':'אוק-25','תאריך':'1','סה"כ':'8','יום':'עבודה במשרד'},
+      {employee_id:'1002','שם עובד':'דני','חודש':'אוק-25','תאריך':'1','כניסה':'09:00','יציאה':'17:00','יום':'עבודה במשרד'}
+    ],
+    actions: [
+      {employee_id:'1001','שם עובד':'רות','date':'2025-09-30','מיילים':'3','שיחות':'2','משימות':'1'},
+      {employee_id:'1001','שם עובד':'רות','date':'2025-10-01','מיילים':'5','שיחות':'4','משימות':'2'},
+      {employee_id:'1002','שם עובד':'דני','date':'2025-10-01','מיילים':'2','שיחות':'1','משימות':'1'}
+    ],
+    activity: [
+      {employee_id:'1001','date':'2025-10-01','הועברו לסגירה':'7','הועברו להמתנה':'2'}
+    ],
+    whatsapp: [
+      {employee_id:'1001','date':'2025-10-01','וואטסאפ התקבל':'10','וואטסאפ נענה':'9'}
+    ],
+    openings: [
+      {employee_id:'1001','date':'2025-10-01','פניות שנפתחו':'5'},
+      {employee_id:'1002','date':'2025-10-01','פניות שנפתחו':'3'}
+    ]
+  };
+
+  // מריץ את אותו מנוע על מערכים פנימיים
+  const store = new Map();
+  function up(row0, mapper){
+    const r = {}; for (const k in row0){ r[String(k).trim().toLowerCase()] = row0[k]; }
+    const empId = (r.employee_id ?? r['מספר עובד'] ?? r['עובד'] ?? r.id ?? '').toString().trim();
+    const empName = (r.employee_name ?? r['שם עובד'] ?? r['שם'] ?? '').toString().trim();
+    if(!empId) return;
+    let ymd = parseDateSmart(row0);
+    if(!ymd) return;
+    const key = empId + '__' + ymd;
+    if(!store.has(key)) store.set(key, { date: ymd, employee_id: empId, employee_name: empName, ...structuredClone(DEFAULT_ROW) });
+    const row = store.get(key);
+    mapper(r, row);
+    if(empName) row.employee_name = empName;
+  }
+
+  demoFiles.attendance.forEach(o=>{
+    up(o, (r,row)=>{
+      const total = r['סה"כ'] ?? r['סה\"כ'] ?? r["סה'כ"] ?? r['סהכ'] ?? r['total'];
+      if(total) row.work_hours += toNumber(total);
+      else{
+        const tin=r['כניסה'], tout=r['יציאה'];
+        if(tin && tout){
+          const [hi,mi]=tin.split(':').map(n=>parseInt(n,10));
+          const [ho,mo]=tout.split(':').map(n=>parseInt(n,10));
+          row.work_hours += ((ho*60+mo)-(hi*60+mi))/60;
+        }
+      }
+      const dayType = (r['יום']||'');
+      if(/מהבית/.test(dayType)) row.work_location='home';
+      else if(/משרד/.test(dayType)) row.work_location='office';
+    });
+  });
+  demoFiles.actions.forEach(o=>{
+    up(o, (r,row)=>{
+      row.emails_sent += toNumber(r['מיילים']);
+      row.calls_logged += toNumber(r['שיחות']);
+      row.tasks_logged += toNumber(r['משימות']);
+    });
+  });
+  demoFiles.activity.forEach(o=>{
+    up(o, (r,row)=>{
+      row.moved_to_closure += toNumber(r['הועברו לסגירה']);
+      row.moved_to_pending += toNumber(r['הועברו להמתנה']);
+    });
+  });
+  demoFiles.whatsapp.forEach(o=>{
+    up(o, (r,row)=>{
+      row.whatsapp_received += toNumber(r['וואטסאפ התקבל']);
+      row.whatsapp_replied  += toNumber(r['וואטסאפ נענה']);
+    });
+  });
+  demoFiles.openings.forEach(o=>{
+    up(o, (r,row)=>{
+      row.tickets_opened += toNumber(r['פניות שנפתחו']);
+    });
+  });
+
+  const arr = [...store.values()].sort((a,b)=> a.date.localeCompare(b.date) || a.employee_id.localeCompare(b.employee_id));
+  LAST_ROWS = arr;
+  render(arr);
+  setStatus('דוגמה נטענה');
+  log('נטענו נתוני דוגמה: ' + arr.length + ' שורות');
+});
+
+/* ========= עזרה מהירה =========
+1) ודאי שהקבצים בפורמט CSV (לא XLSX).
+2) ודאי שיש כותרת עמודה "עובד" או "employee_id".
+3) ודאי שיש "date" מלא או "חודש" + "תאריך" (יום בחודש, מספר).
+4) אם עדיין לא עובד — הדביקי כאן שורת כותרות + 2–3 שורות דוגמה, ואתאים את המיפוי.
+================================ */
+</script>
 </body>
 </html>
